@@ -2,7 +2,7 @@
 # Product Requirements Document (PRD)
 
 ## Product Name
-CodeArena AI  
+LETS PREP
 Multiplayer DSA Battles + AI-Powered Coding Interview Simulator
 
 ---
