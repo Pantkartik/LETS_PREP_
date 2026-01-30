@@ -1,4 +1,4 @@
-# EduPlatform - Comprehensive Educational Platform
+# LET'S PREP - Comprehensive Educational Platform
 
 ## Overview
 A modern, responsive educational platform with role-based authentication, game room management, and activity tracking using heatmaps similar to LeetCode.

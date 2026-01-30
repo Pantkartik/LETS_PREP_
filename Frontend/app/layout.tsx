@@ -9,7 +9,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'LETS PREP - Multiplayer DSA Battles & AI Interview Simulator',
+  title: "LET'S PREP - Multiplayer DSA Battles & AI Interview Simulator",
   description: 'Master DSA and ace coding interviews with real-time multiplayer battles, AI-powered coaching, and personalized learning.',
   generator: 'v0.app',
   icons: {

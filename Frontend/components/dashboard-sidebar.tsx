@@ -2,7 +2,8 @@
 
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useSupabaseAuth } from '@/components/supabase-auth-provider';
 import {
   Home,
   Zap,
@@ -15,27 +16,62 @@ import {
   Code,
   User,
   BookOpen,
-  Gamepad2,
+  LayoutDashboard,
+  Swords,
+  Bot,
+  Award,
+  Book,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
-const mainMenuItems = [
-  { label: 'Dashboard', icon: Home, href: '/dashboard' },
-  { label: 'Battle Arena', icon: Zap, href: '/battles' },
-  { label: 'Interview Simulator', icon: Brain, href: '/interviews' },
-  { label: 'Competitions', icon: Gamepad2, href: '/competitions' },
-  { label: 'Leaderboards', icon: Trophy, href: '/leaderboards' },
-  { label: 'Analytics', icon: BarChart3, href: '/analytics' },
-  { label: 'Community', icon: Users, href: '/community' },
-  { label: 'Resources', icon: BookOpen, href: '/resources' },
-];
-
-const secondaryMenuItems = [
-  { label: 'Profile', icon: User, href: '/profile' },
-  { label: 'Settings', icon: Settings, href: '/settings' },
-];
-
-function DashboardSidebarComponent() {
+const DashboardSidebarComponent = () => {
   const pathname = usePathname();
+
+  const { signOut, profile, user } = useSupabaseAuth();
+  const router = useRouter();
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      router.push('/');
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
+
+  const role = profile?.role || user?.user_metadata?.role || 'STUDENT';
+
+  // Determine nav items based on role
+  const navItems = role === 'TEACHER' ? [
+    { label: 'Dashboard', icon: LayoutDashboard, href: '/teacher-dashboard' },
+    { label: 'Classes', icon: Users, href: '/classes' },
+    { label: 'Competitions', icon: Trophy, href: '/teacher-competitions' },
+    { label: 'Assignments', icon: Code, href: '/assignments' },
+    { label: 'Analytics', icon: BarChart3, href: '/analytics' },
+    { label: 'Settings', icon: Settings, href: '/settings' },
+  ] : [
+    { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
+    { label: 'Battle Arena', icon: Swords, href: '/battles' },
+    { label: 'Problem Bank', icon: Code, href: '/problems' },
+    { label: 'Interview Simulator', icon: Bot, href: '/interviews' },
+    { label: 'Competitions', icon: Trophy, href: '/competitions' },
+    { label: 'Leaderboards', icon: Award, href: '/leaderboards' },
+    { label: 'Analytics', icon: BarChart3, href: '/analytics' },
+    { label: 'Community', icon: Users, href: '/community' },
+    { label: 'Resources', icon: BookOpen, href: '/resources' },
+    { label: 'Profile', icon: User, href: '/profile' },
+    { label: 'Settings', icon: Settings, href: '/settings' },
+  ];
+
+  // Prevent hydration mismatch by initially rendering a consistent state (or nothing) if needed
+  // However, for sidebar, we usually want SEO / quick visual. 
+  // Code staleness was likely the issue, but 'isMounted' ensures we can handle client-only logic safely if needed in future.
+  // For now, simply re-saving this file with the 'isMounted' hook (even unused effectively) will trigger a rebuild.
 
   return (
     <aside className="w-64 border-r border-border/30 bg-card/50 h-screen sticky top-0 flex flex-col">
@@ -44,49 +80,23 @@ function DashboardSidebarComponent() {
         <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center">
           <Code className="w-5 h-5 text-primary-foreground" />
         </div>
-        <span className="font-bold text-lg">EduPlatform</span>
+        <span className="font-bold text-lg">LET'S PREP</span>
       </Link>
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {/* Main Menu */}
         <div className="space-y-1">
-          {mainMenuItems.map((item) => {
+          {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link key={item.href} href={item.href}>
                 <Button
                   variant={isActive ? 'default' : 'ghost'}
-                  className={`w-full justify-start gap-3 ${
-                    isActive
-                      ? 'bg-primary hover:bg-primary/90'
-                      : 'hover:bg-card'
-                  }`}
-                >
-                  <item.icon className="w-4 h-4" />
-                  {item.label}
-                </Button>
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* Divider */}
-        <div className="my-4 border-t border-border/30" />
-
-        {/* Secondary Menu */}
-        <div className="space-y-1">
-          {secondaryMenuItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link key={item.href} href={item.href}>
-                <Button
-                  variant={isActive ? 'default' : 'ghost'}
-                  className={`w-full justify-start gap-3 ${
-                    isActive
-                      ? 'bg-primary hover:bg-primary/90'
-                      : 'hover:bg-card'
-                  }`}
+                  className={`w-full justify-start gap-3 ${isActive
+                    ? 'bg-primary hover:bg-primary/90'
+                    : 'hover:bg-card'
+                    }`}
                 >
                   <item.icon className="w-4 h-4" />
                   {item.label}
@@ -99,17 +109,17 @@ function DashboardSidebarComponent() {
 
       {/* Footer */}
       <div className="p-4 border-t border-border/30 space-y-2">
-        <Button variant="ghost" className="w-full justify-start gap-3 hover:bg-card text-destructive hover:text-destructive">
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-3 text-red-400 hover:text-red-500 hover:bg-red-500/10"
+          onClick={handleLogout}
+        >
           <LogOut className="w-4 h-4" />
-          Logout
+          Log Out
         </Button>
       </div>
     </aside>
   );
-}
+};
 
-// Named export for use with named imports
-export { DashboardSidebarComponent as DashboardSidebar };
-
-// Default export for use with default imports
-export default DashboardSidebarComponent;
+export const DashboardSidebar = DashboardSidebarComponent;

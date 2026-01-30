@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { DashboardSidebar } from '@/components/dashboard-sidebar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -8,107 +10,140 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Zap,
-  Plus,
   Users,
   Clock,
-  Trophy,
-  Lock,
-  Globe,
   Play,
   Search,
+  Code,
+  LogIn,
 } from 'lucide-react';
+import { createClient } from '@/lib/supabase-client';
+import { toast } from 'sonner';
 
-const activeBattles = [
-  {
-    id: 1,
-    name: 'Two Sum Challenge',
-    difficulty: 'Easy',
-    type: '1v1',
-    players: 1245,
-    prize: '100 XP',
-    status: 'Live',
-  },
-  {
-    id: 2,
-    name: 'Binary Tree Max Path',
-    difficulty: 'Hard',
-    type: '1v1',
-    players: 342,
-    prize: '250 XP',
-    status: 'Live',
-  },
-  {
-    id: 3,
-    name: 'LeetCode Weekly #342',
-    difficulty: 'Medium',
-    type: '1v1',
-    players: 5821,
-    prize: '150 XP',
-    status: 'Live',
-  },
-  {
-    id: 4,
-    name: 'Team Battle: Graph',
-    difficulty: 'Hard',
-    type: 'Team',
-    players: 284,
-    prize: '300 XP',
-    status: 'Live',
-  },
-];
-
-const tournaments = [
-  {
-    id: 1,
-    name: 'Winter Championship 2024',
-    startDate: 'Jan 28, 2024',
-    endDate: 'Feb 4, 2024',
-    participants: 1240,
-    prize: '$5,000',
-    status: 'Registration Open',
-  },
-  {
-    id: 2,
-    name: 'Weekly Tournament #52',
-    startDate: 'Today 6:00 PM',
-    endDate: 'Tomorrow 6:00 PM',
-    participants: 342,
-    prize: '$500',
-    status: 'Starting Soon',
-  },
-];
-
+// Keep existing mock data for History/Tournaments tabs if not fully implementing them yet
 const myBattles = [
-  {
-    id: 1,
-    opponent: 'CodeNinja23',
-    problem: 'Merge Sorted Arrays',
-    result: 'Won',
-    time: '2:34',
-    xpGained: 120,
-    date: '2 hours ago',
-  },
-  {
-    id: 2,
-    opponent: 'AlgoMaster',
-    problem: 'LRU Cache',
-    result: 'Lost',
-    time: '5:12',
-    xpGained: 30,
-    date: '5 hours ago',
-  },
-  {
-    id: 3,
-    opponent: 'ByteForce',
-    problem: 'Median of Two Arrays',
-    result: 'Won',
-    time: '3:45',
-    xpGained: 150,
-    date: '1 day ago',
-  },
+  { id: 1, opponent: 'CodeNinja23', problem: 'Merge Sorted Arrays', result: 'Won', time: '2:34', xpGained: 120, date: '2 hours ago' },
 ];
 
 export default function BattlesPage() {
+  const [activeBattles, setActiveBattles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [joinCode, setJoinCode] = useState('');
+  const router = useRouter();
+  const supabase = createClient();
+
+  useEffect(() => {
+    fetchBattles();
+
+    // Subscribe to changes in battles (e.g. new rooms, status changes)
+    const channel = supabase
+      .channel('public:battles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'battles' }, () => {
+        fetchBattles();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const fetchBattles = async () => {
+    try {
+      // Fetch OPEN battles (waiting for players)
+      const { data, error } = await supabase
+        .from('battles')
+        .select(`
+          *,
+          profiles:created_by (full_name)
+        `)
+        .eq('status', 'WAITING') // Only show waiting rooms
+        .eq('battle_type', 'PUBLIC') // Only show public rooms in the list
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setActiveBattles(data || []);
+    } catch (error) {
+      console.error('Error fetching battles:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleJoinByCode = async () => {
+    if (!joinCode) {
+      toast.error("Please enter a room code");
+      return;
+    }
+
+    try {
+      // Find battle by code
+      const { data: battle, error } = await supabase
+        .from('battles')
+        .select('id, status')
+        .eq('room_code', joinCode.toUpperCase())
+        .single();
+
+      if (error || !battle) {
+        toast.error("Invalid room code");
+        return;
+      }
+
+      if (battle.status !== 'WAITING') {
+        toast.error("This battle has already started or ended");
+        return;
+      }
+
+      joinBattle(battle.id);
+    } catch (error) {
+      console.error("Join error:", error);
+      toast.error("Failed to join room");
+    }
+  };
+
+  const joinBattle = async (battleId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Please log in to join");
+        return;
+      }
+
+      // Check if already in
+      const { data: existing } = await supabase
+        .from('battle_participants')
+        .select('id')
+        .eq('battle_id', battleId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (existing) {
+        router.push(`/battles/${battleId}`); // Redirect if already joined
+        return;
+      }
+
+      // Join
+      const { error } = await supabase
+        .from('battle_participants')
+        .insert([{
+          battle_id: battleId,
+          user_id: user.id
+        }]);
+
+      if (error) throw error;
+
+      // Update participant count
+      // await supabase.rpc('increment_battle_participants', { battle_id: battleId }); // Optional optimized way, or rely on realtime
+
+      toast.success("Joined battle!");
+      router.push(`/battles/${battleId}`); // Redirect to lobby/arena
+
+    } catch (error: any) {
+      console.error("Error joining:", error);
+      toast.error("Failed to join battle: " + error.message);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-background text-foreground">
       <DashboardSidebar />
@@ -125,27 +160,31 @@ export default function BattlesPage() {
             </p>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button className="bg-primary hover:bg-primary/90 gap-2">
-              <Play className="w-4 h-4" />
-              Start 1v1 Battle
-            </Button>
-            <Button variant="outline" className="border-border/50 gap-2 bg-transparent">
-              <Users className="w-4 h-4" />
-              Create Team Battle
-            </Button>
-            <Button variant="outline" className="border-border/50 gap-2 bg-transparent">
-              <Plus className="w-4 h-4" />
-              Create Room
-            </Button>
-          </div>
+          {/* Join by Code Section */}
+          <Card className="p-6 bg-card/50 border-dashed border-2 border-border/50">
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Code className="w-5 h-5 text-accent" />
+              Have a Room Code?
+            </h3>
+            <div className="flex gap-3 max-w-md">
+              <Input
+                placeholder="Enter 6-character code"
+                className="font-mono uppercase tracking-widest text-lg"
+                maxLength={6}
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+              />
+              <Button onClick={handleJoinByCode} className="gap-2">
+                <LogIn className="w-4 h-4" />
+                Join Room
+              </Button>
+            </div>
+          </Card>
 
           {/* Main Content */}
           <Tabs defaultValue="active" className="space-y-6">
             <TabsList className="bg-card/50 border border-border/30">
-              <TabsTrigger value="active">Active Battles</TabsTrigger>
-              <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
+              <TabsTrigger value="active">Active Rooms</TabsTrigger>
               <TabsTrigger value="history">My Battle History</TabsTrigger>
             </TabsList>
 
@@ -155,102 +194,72 @@ export default function BattlesPage() {
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search battles..."
+                    placeholder="Search public battles..."
                     className="pl-10 bg-card/50 border-border/50"
                   />
                 </div>
               </div>
 
-              <div className="grid gap-4">
-                {activeBattles.map((battle) => (
-                  <Card
-                    key={battle.id}
-                    className="border-border/50 bg-card/50 p-6 hover:bg-card/80 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <h3 className="font-bold text-lg">{battle.name}</h3>
-                          <Badge
-                            className={
-                              battle.difficulty === 'Easy'
-                                ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                                : battle.difficulty === 'Medium'
-                                  ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
-                                  : 'bg-red-500/20 text-red-400 border-red-500/30'
-                            }
-                          >
-                            {battle.difficulty}
-                          </Badge>
-                          <Badge variant="outline" className="border-border/50">
-                            <Users className="w-3 h-3 mr-1" />
-                            {battle.players}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Zap className="w-4 h-4" />
-                            {battle.prize}
+              {loading ? (
+                <div>Loading active battles...</div>
+              ) : activeBattles.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">No public battles active right now. Join by code or create one!</div>
+              ) : (
+                <div className="grid gap-4">
+                  {activeBattles.map((battle) => (
+                    <Card
+                      key={battle.id}
+                      className="border-border/50 bg-card/50 p-6 hover:bg-card/80 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <h3 className="font-bold text-lg">{battle.title}</h3>
+                            <Badge
+                              className={
+                                battle.difficulty === 'EASY'
+                                  ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                                  : battle.difficulty === 'MEDIUM'
+                                    ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+                                    : 'bg-red-500/20 text-red-400 border-red-500/30'
+                              }
+                            >
+                              {battle.difficulty}
+                            </Badge>
+                            <Badge variant="outline" className="border-border/50">
+                              <Users className="w-3 h-3 mr-1" />
+                              {/* Show real current_players and max_players */}
+                              {battle.current_players || 0} / {battle.max_players}
+                            </Badge>
+                            {battle.battle_type !== 'PUBLIC' && <Badge variant="secondary">PRIVATE</Badge>}
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-4 h-4" />
-                            {battle.status}
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <span className="font-mono bg-muted px-1 rounded text-xs">{battle.room_code}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-4 h-4" />
+                              Waiting for players...
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs">Hosted by {(battle as any).profiles?.full_name || 'Unknown'}</span>
+                            </div>
                           </div>
-                          <div>{battle.type}</div>
                         </div>
+                        {/* Join Button - Disable if full */}
+                        <Button
+                          className="bg-primary hover:bg-primary/90 gap-2"
+                          onClick={() => joinBattle(battle.id)}
+                          disabled={(battle.current_players || 0) >= battle.max_players}
+                        >
+                          <Play className="w-4 h-4" />
+                          {(battle.current_players || 0) >= battle.max_players ? 'Full' : 'Join Battle'}
+                        </Button>
                       </div>
-                      <Button className="bg-primary hover:bg-primary/90 gap-2">
-                        <Play className="w-4 h-4" />
-                        Join Battle
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-
-            {/* Tournaments Tab */}
-            <TabsContent value="tournaments" className="space-y-4">
-              <div className="grid gap-4">
-                {tournaments.map((tournament) => (
-                  <Card
-                    key={tournament.id}
-                    className="border-border/50 bg-card/50 p-6 hover:bg-card/80 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <Trophy className="w-5 h-5 text-accent" />
-                          <h3 className="font-bold text-lg">{tournament.name}</h3>
-                          <Badge
-                            className={
-                              tournament.status === 'Registration Open'
-                                ? 'bg-primary/20 text-primary border-primary/30'
-                                : 'bg-accent/20 text-accent border-accent/30'
-                            }
-                          >
-                            {tournament.status}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-4 h-4" />
-                            {tournament.startDate} - {tournament.endDate}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Users className="w-4 h-4" />
-                            {tournament.participants} participants
-                          </div>
-                          <div className="font-semibold text-accent">Prize: {tournament.prize}</div>
-                        </div>
-                      </div>
-                      <Button className="bg-primary hover:bg-primary/90 gap-2">
-                        Register
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
             {/* Battle History Tab */}
@@ -277,11 +286,6 @@ export default function BattlesPage() {
                         </div>
                         <div className="flex items-center gap-6 text-sm text-muted-foreground">
                           <div>vs {battle.opponent}</div>
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-4 h-4" />
-                            {battle.time}
-                          </div>
-                          <div>+{battle.xpGained} XP</div>
                           <div>{battle.date}</div>
                         </div>
                       </div>

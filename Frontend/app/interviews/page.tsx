@@ -1,103 +1,89 @@
 'use client';
 
+import { useState } from 'react';
 import { DashboardSidebar } from '@/components/dashboard-sidebar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Brain,
+  Video,
+  Mic,
+  MicOff,
+  VideoOff,
   Play,
   Clock,
-  AlertCircle,
+  Brain,
+  Code,
+  MessageSquare,
+  Settings,
+  Award,
   TrendingUp,
-  BookOpen,
-  Users,
-  Zap,
 } from 'lucide-react';
 
 const interviewTypes = [
   {
-    id: 1,
-    company: 'Google',
-    role: 'Software Engineer',
-    difficulty: 'Hard',
-    duration: '45 min',
-    completed: 5,
-    description: 'System design and coding interviews',
-  },
-  {
-    id: 2,
-    company: 'Meta',
-    role: 'Backend Engineer',
-    difficulty: 'Hard',
-    duration: '50 min',
-    completed: 3,
-    description: 'Distributed systems and algorithms',
-  },
-  {
-    id: 3,
-    company: 'Amazon',
-    role: 'SDE',
-    difficulty: 'Medium',
-    duration: '40 min',
-    completed: 7,
-    description: 'Two-pointer and sorting problems',
-  },
-  {
-    id: 4,
-    company: 'Microsoft',
-    role: 'Software Engineer',
+    id: 'technical',
+    title: 'Technical Interview',
+    description: 'Practice coding problems and system design',
+    icon: Code,
     difficulty: 'Medium',
     duration: '45 min',
-    completed: 4,
-    description: 'Trees and dynamic programming',
+    color: 'primary',
   },
   {
-    id: 5,
-    company: 'Apple',
-    role: 'Software Engineer',
+    id: 'behavioral',
+    title: 'Behavioral Interview',
+    description: 'Practice STAR method and soft skills',
+    icon: MessageSquare,
+    difficulty: 'Easy',
+    duration: '30 min',
+    color: 'accent',
+  },
+  {
+    id: 'system-design',
+    title: 'System Design',
+    description: 'Design scalable systems and architectures',
+    icon: Brain,
     difficulty: 'Hard',
-    duration: '50 min',
-    completed: 2,
-    description: 'Advanced algorithms and optimization',
-  },
-  {
-    id: 6,
-    company: 'Tesla',
-    role: 'Software Engineer',
-    difficulty: 'Medium',
-    duration: '40 min',
-    completed: 1,
-    description: 'General coding and problem-solving',
+    duration: '60 min',
+    color: 'destructive',
   },
 ];
 
-const previousInterviews = [
+const pastInterviews = [
   {
     id: 1,
-    company: 'Google',
-    score: '8.5/10',
-    feedback: 'Great approach but could optimize better',
+    type: 'Technical Interview',
     date: '2 days ago',
+    score: 85,
+    feedback: 'Strong problem-solving skills',
+    duration: '42 min',
   },
   {
     id: 2,
-    company: 'Meta',
-    score: '7.2/10',
-    feedback: 'Good solution but slow communication',
-    date: '5 days ago',
+    type: 'Behavioral Interview',
+    date: '1 week ago',
+    score: 92,
+    feedback: 'Excellent communication',
+    duration: '28 min',
   },
   {
     id: 3,
-    company: 'Amazon',
-    score: '9.1/10',
-    feedback: 'Excellent explanation and edge case handling',
-    date: '1 week ago',
+    type: 'System Design',
+    date: '2 weeks ago',
+    score: 78,
+    feedback: 'Good architectural thinking',
+    duration: '58 min',
   },
 ];
 
-export default function InterviewsPage() {
+export default function InterviewSimulatorPage() {
+  const [isRecording, setIsRecording] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+
   return (
     <div className="flex h-screen bg-background text-foreground">
       <DashboardSidebar />
@@ -106,143 +92,260 @@ export default function InterviewsPage() {
           {/* Header */}
           <div className="space-y-2">
             <h1 className="text-3xl font-bold flex items-center gap-2">
-              <Brain className="w-8 h-8 text-accent" />
-              AI Interview Simulator
+              <Video className="w-8 h-8 text-primary" />
+              Interview Simulator
             </h1>
             <p className="text-muted-foreground">
-              Practice with company-specific interview questions powered by AI
+              Practice interviews with AI-powered feedback and improve your skills
             </p>
           </div>
 
-          {/* Stats Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="border-border/50 bg-card/50 p-6">
-              <p className="text-muted-foreground text-sm">Interviews Completed</p>
-              <p className="text-3xl font-bold mt-2">22</p>
-              <p className="text-xs text-muted-foreground mt-2">+3 this week</p>
-            </Card>
+          <Tabs defaultValue="start" className="space-y-6">
+            <TabsList className="bg-card/50 border border-border/30">
+              <TabsTrigger value="start">Start Interview</TabsTrigger>
+              <TabsTrigger value="history">Past Interviews</TabsTrigger>
+              <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            </TabsList>
 
-            <Card className="border-border/50 bg-card/50 p-6">
-              <p className="text-muted-foreground text-sm">Average Score</p>
-              <p className="text-3xl font-bold mt-2">8.2/10</p>
-              <p className="text-xs text-muted-foreground mt-2">Trending up ↑</p>
-            </Card>
-
-            <Card className="border-border/50 bg-card/50 p-6">
-              <p className="text-muted-foreground text-sm">Companies Practiced</p>
-              <p className="text-3xl font-bold mt-2">12</p>
-              <p className="text-xs text-muted-foreground mt-2">All FAANG+</p>
-            </Card>
-
-            <Card className="border-border/50 bg-card/50 p-6">
-              <p className="text-muted-foreground text-sm">Total Time</p>
-              <p className="text-3xl font-bold mt-2">18h 32m</p>
-              <p className="text-xs text-muted-foreground mt-2">Practice logged</p>
-            </Card>
-          </div>
-
-          {/* Interview Types Grid */}
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold">Start an Interview</h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {interviewTypes.map((interview) => (
-                <Card
-                  key={interview.id}
-                  className="border-border/50 bg-card/50 hover:bg-card/80 transition-colors p-6 flex flex-col"
-                >
-                  <div className="space-y-3 flex-1">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-bold text-lg">{interview.company}</h3>
-                        <p className="text-sm text-muted-foreground">{interview.role}</p>
+            {/* Start Interview Tab */}
+            <TabsContent value="start" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {interviewTypes.map((type) => {
+                  const Icon = type.icon;
+                  return (
+                    <Card
+                      key={type.id}
+                      className="border-border/50 bg-card/50 p-6 hover:bg-card/80 transition-all hover:scale-105 cursor-pointer"
+                    >
+                      <div className="space-y-4">
+                        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                          <Icon className="w-6 h-6 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-lg mb-1">{type.title}</h3>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            {type.description}
+                          </p>
+                          <div className="flex items-center gap-2 mb-4">
+                            <Badge
+                              className={
+                                type.difficulty === 'Easy'
+                                  ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                                  : type.difficulty === 'Medium'
+                                    ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+                                    : 'bg-red-500/20 text-red-400 border-red-500/30'
+                              }
+                            >
+                              {type.difficulty}
+                            </Badge>
+                            <Badge variant="outline" className="border-border/50">
+                              <Clock className="w-3 h-3 mr-1" />
+                              {type.duration}
+                            </Badge>
+                          </div>
+                          <Button className="w-full bg-primary hover:bg-primary/90">
+                            <Play className="w-4 h-4 mr-2" />
+                            Start Interview
+                          </Button>
+                        </div>
                       </div>
-                      <Badge
-                        className={
-                          interview.difficulty === 'Easy'
-                            ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                            : interview.difficulty === 'Medium'
-                              ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
-                              : 'bg-red-500/20 text-red-400 border-red-500/30'
-                        }
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* Quick Setup */}
+              <Card className="border-border/50 bg-card/50 p-6">
+                <h3 className="font-bold text-lg mb-4">Quick Setup</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        Camera Preview
+                      </label>
+                      <div className="aspect-video bg-muted/20 rounded-lg flex items-center justify-center border border-border/30">
+                        {isVideoOff ? (
+                          <VideoOff className="w-12 h-12 text-muted-foreground" />
+                        ) : (
+                          <div className="text-muted-foreground text-sm">Camera feed will appear here</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsVideoOff(!isVideoOff)}
+                        className={isVideoOff ? 'bg-destructive/20' : ''}
                       >
-                        {interview.difficulty}
-                      </Badge>
-                    </div>
-
-                    <p className="text-sm text-muted-foreground">{interview.description}</p>
-
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {interview.duration}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Zap className="w-4 h-4" />
-                        {interview.completed} done
-                      </div>
+                        {isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsMuted(!isMuted)}
+                        className={isMuted ? 'bg-destructive/20' : ''}
+                      >
+                        {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                      </Button>
+                      <Button variant="outline" size="sm">
+                        <Settings className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
 
-                  <Button className="w-full mt-4 bg-accent hover:bg-accent/90 gap-2">
-                    <Play className="w-4 h-4" />
-                    Start Interview
-                  </Button>
-                </Card>
-              ))}
-            </div>
-          </div>
-
-          {/* Previous Interviews */}
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold">Recent Interview Results</h2>
-            <div className="grid gap-4">
-              {previousInterviews.map((interview) => (
-                <Card
-                  key={interview.id}
-                  className="border-border/50 bg-card/50 p-6 hover:bg-card/80 transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3">
-                        <h3 className="font-bold text-lg">{interview.company} Interview</h3>
-                        <Badge className="bg-accent/20 text-accent border-accent/30">
-                          {interview.score}
-                        </Badge>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        Interview Settings
+                      </label>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground">Difficulty Level</label>
+                          <select className="w-full mt-1 px-3 py-2 bg-card/50 border border-border/50 rounded-md">
+                            <option>Easy</option>
+                            <option>Medium</option>
+                            <option>Hard</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">Focus Area</label>
+                          <select className="w-full mt-1 px-3 py-2 bg-card/50 border border-border/50 rounded-md">
+                            <option>Data Structures</option>
+                            <option>Algorithms</option>
+                            <option>System Design</option>
+                            <option>Behavioral</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">Duration (minutes)</label>
+                          <Input
+                            type="number"
+                            defaultValue={30}
+                            min={15}
+                            max={90}
+                            className="mt-1 bg-card/50 border-border/50"
+                          />
+                        </div>
                       </div>
-                      <p className="text-muted-foreground text-sm">{interview.feedback}</p>
-                      <p className="text-xs text-muted-foreground">{interview.date}</p>
                     </div>
-                    <Button variant="outline" className="border-border/50 bg-transparent">
-                      View Details
-                    </Button>
                   </div>
-                </Card>
-              ))}
-            </div>
-          </div>
+                </div>
+              </Card>
+            </TabsContent>
 
-          {/* Tips & Recommendations */}
-          <Card className="border-border/50 bg-card/50 p-6">
-            <div className="flex gap-4">
-              <div className="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                <AlertCircle className="w-6 h-6 text-accent" />
+            {/* Past Interviews Tab */}
+            <TabsContent value="history" className="space-y-4">
+              <div className="grid gap-4">
+                {pastInterviews.map((interview) => (
+                  <Card
+                    key={interview.id}
+                    className="border-border/50 bg-card/50 p-6 hover:bg-card/80 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-2 flex-1">
+                        <div className="flex items-center gap-3">
+                          <h3 className="font-bold text-lg">{interview.type}</h3>
+                          <Badge
+                            className={
+                              interview.score >= 90
+                                ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                                : interview.score >= 70
+                                  ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+                                  : 'bg-red-500/20 text-red-400 border-red-500/30'
+                            }
+                          >
+                            Score: {interview.score}%
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            {interview.duration}
+                          </div>
+                          <div>{interview.date}</div>
+                          <div className="flex items-center gap-1">
+                            <Award className="w-4 h-4" />
+                            {interview.feedback}
+                          </div>
+                        </div>
+                      </div>
+                      <Button variant="ghost">View Details</Button>
+                    </div>
+                  </Card>
+                ))}
               </div>
-              <div>
-                <h3 className="font-bold mb-2">Interview Tips for This Week</h3>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>
-                    • Focus on explaining your thought process clearly - this improves scores by 15%
-                  </li>
-                  <li>
-                    • Practice system design questions - your score here is lowest (6.8/10)
-                  </li>
-                  <li>
-                    • Review edge cases after each interview session
-                  </li>
-                </ul>
+            </TabsContent>
+
+            {/* Analytics Tab */}
+            <TabsContent value="analytics" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="border-border/50 bg-card/50 p-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Average Score</p>
+                      <p className="text-2xl font-bold">85%</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-green-500">+5% from last month</p>
+                </Card>
+
+                <Card className="border-border/50 bg-card/50 p-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+                      <Clock className="w-5 h-5 text-accent" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Practice</p>
+                      <p className="text-2xl font-bold">12.5 hrs</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Across 15 sessions</p>
+                </Card>
+
+                <Card className="border-border/50 bg-card/50 p-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                      <Award className="w-5 h-5 text-green-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Improvement</p>
+                      <p className="text-2xl font-bold">+18%</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-green-500">Keep it up!</p>
+                </Card>
               </div>
-            </div>
-          </Card>
+
+              <Card className="border-border/50 bg-card/50 p-6">
+                <h3 className="font-bold text-lg mb-4">Performance by Category</h3>
+                <div className="space-y-4">
+                  {[
+                    { name: 'Technical Skills', score: 88, color: 'bg-primary' },
+                    { name: 'Communication', score: 92, color: 'bg-accent' },
+                    { name: 'Problem Solving', score: 85, color: 'bg-green-500' },
+                    { name: 'System Design', score: 78, color: 'bg-yellow-500' },
+                  ].map((category) => (
+                    <div key={category.name}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">{category.name}</span>
+                        <span className="text-sm text-muted-foreground">{category.score}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-muted/20 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${category.color} transition-all`}
+                          style={{ width: `${category.score}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
     </div>

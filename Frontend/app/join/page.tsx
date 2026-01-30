@@ -15,7 +15,7 @@ export default function JoinCompetitionPage() {
   const handleSearchCompetition = async (e: React.FormEvent) => {
     e.preventDefault();
     setJoinStatus('loading');
-    
+
     // Simulate API call
     setTimeout(() => {
       if (inviteCode.includes('dsc')) {
@@ -70,7 +70,7 @@ export default function JoinCompetitionPage() {
             <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center">
               <Code className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-xl">EduPlatform</span>
+            <span className="font-bold text-xl">LET'S PREP</span>
           </Link>
         </div>
       </nav>
@@ -148,10 +148,9 @@ export default function JoinCompetitionPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4 border-y border-border/30">
                   <div>
                     <p className="text-xs text-muted-foreground">Difficulty</p>
-                    <p className={`font-semibold mt-1 ${
-                      competitionData.difficulty === 'Intermediate' ? 'text-yellow-400' : 
-                      competitionData.difficulty === 'Advanced' ? 'text-red-400' : 'text-blue-400'
-                    }`}>
+                    <p className={`font-semibold mt-1 ${competitionData.difficulty === 'Intermediate' ? 'text-yellow-400' :
+                        competitionData.difficulty === 'Advanced' ? 'text-red-400' : 'text-blue-400'
+                      }`}>
                       {competitionData.difficulty}
                     </p>
                   </div>

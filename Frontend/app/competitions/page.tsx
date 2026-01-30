@@ -1,334 +1,228 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import Link from 'next/link';
-import { Code, Plus, Copy, Users, Clock, Trophy, Trash2, Edit2, Share2 } from 'lucide-react';
-import DashboardSidebar from '@/components/dashboard-sidebar';
+import { DashboardSidebar } from '@/components/dashboard-sidebar';
+import { createClient } from '@/lib/supabase-client';
+import { Code, Trophy, Users, Clock, Share2, LogIn, CheckCircle } from 'lucide-react';
+import { toast } from 'sonner';
 
-interface Competition {
+interface Tournament {
   id: string;
-  name: string;
+  title: string;
   description: string;
-  status: 'draft' | 'active' | 'completed';
-  startTime: string;
-  endTime: string;
-  participants: number;
-  maxParticipants: number;
-  inviteLink: string;
-  createdBy: string;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  status: string;
+  start_time: string;
+  end_time: string;
+  current_participants: number;
+  max_participants: number;
+  created_by: string;
+  is_joined?: boolean;
 }
 
 export default function CompetitionsPage() {
-  const [competitions, setCompetitions] = useState<Competition[]>([
-    {
-      id: '1',
-      name: 'Data Structures Challenge',
-      description: 'Master arrays, linked lists, and trees',
-      status: 'active',
-      startTime: '2024-01-28T10:00:00',
-      endTime: '2024-01-29T10:00:00',
-      participants: 24,
-      maxParticipants: 50,
-      inviteLink: 'https://eduplatform.com/join/dsc-2024',
-      createdBy: 'Dr. Smith',
-      difficulty: 'intermediate',
-    },
-    {
-      id: '2',
-      name: 'Algorithms Showdown',
-      description: 'Solve complex algorithmic problems',
-      status: 'active',
-      startTime: '2024-01-30T14:00:00',
-      endTime: '2024-01-31T14:00:00',
-      participants: 18,
-      maxParticipants: 40,
-      inviteLink: 'https://eduplatform.com/join/algo-2024',
-      createdBy: 'Prof. Johnson',
-      difficulty: 'advanced',
-    },
-  ]);
+  const [competitions, setCompetitions] = useState<Tournament[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const [showModal, setShowModal] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [copiedLink, setCopiedLink] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    difficulty: 'intermediate' as const,
-    maxParticipants: 50,
-  });
+  const supabase = createClient();
 
-  const handleCreateCompetition = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name.trim()) return;
+  useEffect(() => {
+    fetchCompetitions();
+  }, []);
 
-    const newCompetition: Competition = {
-      id: Date.now().toString(),
-      name: formData.name,
-      description: formData.description,
-      status: 'draft',
-      startTime: new Date().toISOString(),
-      endTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      participants: 0,
-      maxParticipants: formData.maxParticipants,
-      inviteLink: `https://eduplatform.com/join/${formData.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`,
-      createdBy: 'You',
-      difficulty: formData.difficulty,
-    };
+  const fetchCompetitions = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUserId(user?.id || null);
 
-    setCompetitions([newCompetition, ...competitions]);
-    setFormData({ name: '', description: '', difficulty: 'intermediate', maxParticipants: 50 });
-    setShowModal(false);
+      // Fetch tournaments
+      const { data: tournaments, error } = await supabase
+        .from('tournaments')
+        .select(`
+          *,
+          profiles:created_by (full_name)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Check which ones the user has joined
+      let joinedIds = new Set();
+      if (user) {
+        const { data: participation } = await supabase
+          .from('tournament_participants')
+          .select('tournament_id')
+          .eq('user_id', user.id);
+
+        if (participation) {
+          participation.forEach(p => joinedIds.add(p.tournament_id));
+        }
+      }
+
+      const formattedData = tournaments?.map(t => ({
+        ...t,
+        is_joined: joinedIds.has(t.id),
+        creator_name: (t as any).profiles?.full_name || 'Unknown'
+      })) || [];
+
+      setCompetitions(formattedData);
+    } catch (error) {
+      console.error('Error fetching competitions:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleCopyLink = (link: string) => {
-    navigator.clipboard.writeText(link);
-    setCopiedLink(link);
-    setTimeout(() => setCopiedLink(null), 2000);
-  };
+  const handleJoin = async (tournamentId: string) => {
+    if (!userId) return;
 
-  const handleDeleteCompetition = (id: string) => {
-    setCompetitions(competitions.filter((c) => c.id !== id));
+    try {
+      const { error } = await supabase
+        .from('tournament_participants')
+        .insert([{ tournament_id: tournamentId, user_id: userId }]);
+
+      if (error) {
+        if (error.code === '23505') { // Unique violation
+          toast.error('You have already joined this competition');
+        } else {
+          throw error;
+        }
+      } else {
+        toast.success('Successfully joined competition!');
+        // Update local state and current_participants count
+        setCompetitions(competitions.map(c =>
+          c.id === tournamentId
+            ? { ...c, is_joined: true, current_participants: (c.current_participants || 0) + 1 }
+            : c
+        ));
+
+        // Also update backend count (optional trigger usually handles this, but for now client side update is visual only)
+      }
+    } catch (error: any) {
+      console.error('Error joining competition:', error);
+      toast.error('Failed to join: ' + error.message);
+    }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'ACTIVE':
         return 'bg-green-500/20 text-green-400';
-      case 'completed':
-        return 'bg-muted text-muted-foreground';
-      default:
+      case 'COMPLETED':
+        return 'bg-muted text-gray-400';
+      case 'UPCOMING':
+        return 'bg-blue-500/20 text-blue-400';
+      default: // REGISTRATION etc
         return 'bg-yellow-500/20 text-yellow-400';
     }
   };
 
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'beginner':
-        return 'text-blue-400';
-      case 'intermediate':
-        return 'text-yellow-400';
-      default:
-        return 'text-red-400';
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-background text-foreground flex">
+    <div className="flex h-screen bg-background text-foreground overflow-hidden">
       <DashboardSidebar />
 
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <nav className="border-b border-border/30 py-4 sticky top-0 bg-background/50 backdrop-blur z-40">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center">
-                <Code className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <h1 className="text-2xl font-bold">Competitions</h1>
+      <main className="flex-1 overflow-auto bg-muted/5 relative">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h1 className="text-3xl font-bold flex items-center gap-3">
+                <Trophy className="w-8 h-8 text-accent" />
+                Active Competitions
+              </h1>
+              <p className="text-muted-foreground">
+                Join public competitions and battle for the leaderboard
+              </p>
             </div>
-            <Button onClick={() => setShowModal(true)} className="bg-primary hover:bg-primary/90 flex gap-2">
-              <Plus className="w-4 h-4" />
-              Create Competition
-            </Button>
           </div>
-        </nav>
 
-        {/* Main Content */}
-        <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto">
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <Card className="border-border/50 bg-card/50 p-6">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Active Competitions</p>
-                  <p className="text-3xl font-bold">{competitions.filter((c) => c.status === 'active').length}</p>
-                </div>
-              </Card>
-              <Card className="border-border/50 bg-card/50 p-6">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Total Participants</p>
-                  <p className="text-3xl font-bold">{competitions.reduce((sum, c) => sum + c.participants, 0)}</p>
-                </div>
-              </Card>
-              <Card className="border-border/50 bg-card/50 p-6">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Completed</p>
-                  <p className="text-3xl font-bold">{competitions.filter((c) => c.status === 'completed').length}</p>
-                </div>
-              </Card>
-            </div>
+          {/* Stats Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="border-border/50 bg-card/50 p-6">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Active Events</p>
+                <p className="text-3xl font-bold">{competitions.filter((c) => c.status === 'ACTIVE' || c.status === 'REGISTRATION' || c.status === 'UPCOMING').length}</p>
+              </div>
+            </Card>
+            <Card className="border-border/50 bg-card/50 p-6">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Total Participants</p>
+                <p className="text-3xl font-bold">{competitions.reduce((sum, c) => sum + (c.current_participants || 0), 0)}</p>
+              </div>
+            </Card>
+            <Card className="border-border/50 bg-card/50 p-6">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Your Enrollments</p>
+                <p className="text-3xl font-bold">{competitions.filter((c) => c.is_joined).length}</p>
+              </div>
+            </Card>
+          </div>
 
-            {/* Competition List */}
-            <div className="space-y-4">
-              {competitions.length === 0 ? (
-                <Card className="border-border/50 bg-card/50 p-12 text-center">
-                  <Trophy className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No competitions yet</h3>
-                  <p className="text-muted-foreground mb-6">Create your first competition to get started</p>
-                  <Button onClick={() => setShowModal(true)} className="bg-primary hover:bg-primary/90">
-                    Create Competition
-                  </Button>
+          {/* List */}
+          <div className="space-y-4">
+            {loading ? (
+              <div className="text-center py-12 text-muted-foreground">Loading competitions...</div>
+            ) : competitions.length === 0 ? (
+              <Card className="border-border/50 bg-card/50 p-12 text-center">
+                <Trophy className="w-12 h-12 mx-auto text-muted-foreground mb-4 opacity-50" />
+                <h3 className="text-lg font-semibold mb-2">No active competitions</h3>
+                <p className="text-muted-foreground">
+                  Check back later for new tournaments.
+                </p>
+              </Card>
+            ) : (
+              competitions.map((competition) => (
+                <Card key={competition.id} className="border-border/50 bg-card/50 p-6 hover:border-primary/50 transition-all group">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
+                    <div className="md:col-span-2 space-y-3">
+                      <div className="flex items-start justify-between md:justify-start md:gap-4">
+                        <h3 className="text-xl font-bold group-hover:text-primary transition-colors">{competition.title}</h3>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(competition.status)}`}>
+                          {competition.status}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground text-sm line-clamp-2">{competition.description}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{(competition as any).creator_name}</span>
+                        <span>•</span>
+                        <span>Created {new Date((competition as any).created_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-primary" />
+                        <span>{competition.current_participants || 0} / {competition.max_participants} enrolled</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-accent" />
+                        <span>Starts {new Date(competition.start_time).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 md:justify-end items-center h-full">
+                      {competition.is_joined ? (
+                        <Button variant="secondary" className="gap-2 bg-green-500/10 text-green-500 hover:bg-green-500/20" disabled>
+                          <CheckCircle className="w-4 h-4" />
+                          Joined
+                        </Button>
+                      ) : (
+                        <Button onClick={() => handleJoin(competition.id)} className="gap-2">
+                          <LogIn className="w-4 h-4" />
+                          Join Room
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </Card>
-              ) : (
-                competitions.map((competition) => (
-                  <Card key={competition.id} className="border-border/50 bg-card/50 p-6 hover:border-border transition-colors">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start mb-4">
-                      <div className="md:col-span-2">
-                        <div className="flex items-start justify-between mb-2">
-                          <h3 className="text-xl font-bold">{competition.name}</h3>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(competition.status)}`}>
-                            {competition.status.charAt(0).toUpperCase() + competition.status.slice(1)}
-                          </span>
-                        </div>
-                        <p className="text-muted-foreground text-sm">{competition.description}</p>
-                        <div className="mt-3 flex gap-3 text-sm">
-                          <span className={`font-semibold ${getDifficultyColor(competition.difficulty)}`}>
-                            {competition.difficulty.charAt(0).toUpperCase() + competition.difficulty.slice(1)}
-                          </span>
-                          <span className="text-muted-foreground">by {competition.createdBy}</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-sm">
-                          <Users className="w-4 h-4 text-primary" />
-                          <span>{competition.participants} / {competition.maxParticipants} participants</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Clock className="w-4 h-4 text-accent" />
-                          <span>Ends {new Date(competition.endTime).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2 md:justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCopyLink(competition.inviteLink)}
-                          className="border-border/50 bg-transparent flex gap-1"
-                        >
-                          <Share2 className="w-4 h-4" />
-                          {copiedLink === competition.inviteLink ? 'Copied!' : 'Share'}
-                        </Button>
-                        <Button variant="outline" size="sm" className="border-border/50 bg-transparent">
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteCompetition(competition.id)}
-                          className="border-border/50 bg-transparent hover:border-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Invite Link */}
-                    <div className="bg-background/50 rounded p-3 flex items-center gap-2">
-                      <Input
-                        value={competition.inviteLink}
-                        readOnly
-                        className="bg-transparent border-0 text-sm text-muted-foreground"
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() => handleCopyLink(competition.inviteLink)}
-                        variant="ghost"
-                        className="text-primary hover:bg-primary/10"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </Card>
-                ))
-              )}
-            </div>
+              ))
+            )}
           </div>
         </div>
-      </div>
-
-      {/* Create Competition Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="border-border/50 bg-card p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-6">Create Competition</h2>
-
-            <form onSubmit={handleCreateCompetition} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Competition Name</Label>
-                <Input
-                  id="name"
-                  placeholder="e.g., Data Structures Challenge"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="bg-background/50 border-border/50"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  placeholder="What is this competition about?"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="bg-background/50 border-border/50"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="difficulty">Difficulty</Label>
-                <select
-                  id="difficulty"
-                  value={formData.difficulty}
-                  onChange={(e) => setFormData({ ...formData, difficulty: e.target.value as any })}
-                  className="w-full px-3 py-2 bg-background/50 border border-border/50 rounded-lg text-foreground"
-                >
-                  <option value="beginner">Beginner</option>
-                  <option value="intermediate">Intermediate</option>
-                  <option value="advanced">Advanced</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="maxParticipants">Max Participants</Label>
-                <Input
-                  id="maxParticipants"
-                  type="number"
-                  min="1"
-                  max="1000"
-                  value={formData.maxParticipants}
-                  onChange={(e) => setFormData({ ...formData, maxParticipants: parseInt(e.target.value) })}
-                  className="bg-background/50 border-border/50"
-                  required
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 border-border/50 bg-transparent"
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" className="flex-1 bg-primary hover:bg-primary/90">
-                  Create
-                </Button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
+      </main>
     </div>
   );
 }

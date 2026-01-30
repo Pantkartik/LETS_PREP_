@@ -1,512 +1,338 @@
 'use client';
 
 import React from "react"
-
 import { DashboardSidebar } from '@/components/dashboard-sidebar';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useState, useRef } from 'react';
+import { useUserProfile } from '@/lib/hooks/use-user-profile';
+import { Skeleton } from '@/components/ui/skeleton';
+import { motion } from 'framer-motion';
+import Link from 'next/link';
 import {
-  User,
-  Mail,
-  MapPin,
-  Link as LinkIcon,
   Trophy,
   Flame,
   Zap,
   Calendar,
   Edit2,
   Share2,
-  Upload,
-  Download,
-  Trash2,
-  AlertTriangle,
+  MapPin,
+  Globe,
+  Github,
+  Twitter,
+  Linkedin,
+  Clock,
+  Target,
+  Award,
+  TrendingUp,
+  Code,
+  Users,
+  Star,
+  Swords
 } from 'lucide-react';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar
+} from 'recharts';
+import { ProblemDial } from '@/components/analytics/problem-dial';
 
-const userStats = [
-  { label: 'Ranking', value: '#127', icon: Trophy },
-  { label: 'Current Streak', value: '12 Days', icon: Flame },
-  { label: 'Total XP', value: '32,450', icon: Zap },
-  { label: 'Member Since', value: 'Jan 2023', icon: Calendar },
+// Mock data for charts (until we have real historical data)
+const activityData = [
+  { name: 'Mon', xp: 400, battles: 2 },
+  { name: 'Tue', xp: 300, battles: 1 },
+  { name: 'Wed', xp: 600, battles: 4 },
+  { name: 'Thu', xp: 200, battles: 1 },
+  { name: 'Fri', xp: 800, battles: 5 },
+  { name: 'Sat', xp: 500, battles: 3 },
+  { name: 'Sun', xp: 900, battles: 6 },
 ];
 
-const achievements = [
-  { id: 1, name: 'First Blood', description: 'Won your first battle', unlocked: true },
-  { id: 2, name: 'Week Warrior', description: 'Maintained a 7-day streak', unlocked: true },
-  { id: 3, name: 'Century Club', description: 'Solved 100 problems', unlocked: true },
-  { id: 4, name: 'Interview Master', description: 'Completed 10 interviews', unlocked: true },
-  { id: 5, name: 'Legend', description: 'Reached #1 in leaderboards', unlocked: false },
-  { id: 6, name: 'Tournament Winner', description: 'Won a tournament', unlocked: false },
-];
-
-const badges = [
-  { id: 1, name: 'Early Adopter', date: 'Jan 2023' },
-  { id: 2, name: 'DSA Master', date: 'Mar 2023' },
-  { id: 3, name: 'Interview Ace', date: 'May 2023' },
-  { id: 4, name: 'Community Star', date: 'Jul 2023' },
-  { id: 5, name: 'Consistent Solver', date: 'Aug 2023' },
+const topicPerformance = [
+  { subject: 'Arrays', A: 120, fullMark: 150 },
+  { subject: 'Trees', A: 98, fullMark: 150 },
+  { subject: 'DP', A: 86, fullMark: 150 },
+  { subject: 'Graphs', A: 99, fullMark: 150 },
+  { subject: 'Strings', A: 85, fullMark: 150 },
 ];
 
 export default function ProfilePage() {
-  const [avatarUrl, setAvatarUrl] = useState('https://github.com/shadcn.png');
-  const [userName, setUserName] = useState('johndoe');
-  const [fullName, setFullName] = useState('John Doe');
-  const [email, setEmail] = useState('john.doe@email.com');
-  const [location, setLocation] = useState('San Francisco, USA');
-  const [bio, setBio] = useState('Passionate software engineer preparing for FAANG interviews.');
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { profile, loading } = useUserProfile();
 
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase();
-  };
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-background text-foreground">
+        <DashboardSidebar />
+        <main className="flex-1 p-8">
+          <div className="space-y-6">
+            <div className="flex gap-4">
+              <Skeleton className="h-24 w-24 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-4 w-48" />
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32" />)}
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+  // Calculate join date
+  const joinDate = profile ? new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Jan 2024';
 
-  const handleDownloadProgress = () => {
-    const progressData = {
-      username: userName,
-      fullName: fullName,
-      email: email,
-      stats: {
-        ranking: '#127',
-        streak: '12 Days',
-        totalXP: '32,450',
-        memberSince: 'Jan 2023',
-      },
-      achievements: achievements.filter(a => a.unlocked),
-      exportDate: new Date().toISOString(),
+  let stats;
+
+  if (profile?.role === 'TEACHER') {
+    const teacherStats = profile.teacher_stats || {
+      students_participated: 0,
+      rating: 0,
+      contests_held: 0,
+      battles_held: 0
     };
 
-    const dataStr = JSON.stringify(progressData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `progress-${userName}-${new Date().getTime()}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleDeleteAccount = () => {
-    if (showDeleteConfirm) {
-      console.log('Account deletion initiated for:', userName);
-      window.location.href = '/login';
-    } else {
-      setShowDeleteConfirm(true);
-    }
-  };
+    stats = [
+      { label: 'Students Reached', value: teacherStats.students_participated.toLocaleString(), icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+      { label: 'Student Rating', value: teacherStats.rating > 0 ? teacherStats.rating.toFixed(1) : 'N/A', icon: Star, color: 'text-yellow-500', bg: 'bg-yellow-500/10' },
+      { label: 'Contests Held', value: teacherStats.contests_held.toString(), icon: Trophy, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+      { label: 'Battles Hosted', value: teacherStats.battles_held.toString(), icon: Swords, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+    ];
+  } else {
+    stats = [
+      { label: 'Global Rank', value: `#${profile?.rank_position || 'N/A'}`, icon: Trophy, color: 'text-yellow-500', bg: 'bg-yellow-500/10' },
+      { label: 'Current Streak', value: `${profile?.xp ? Math.floor(profile.xp / 100) : 0} Days`, icon: Flame, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+      { label: 'Total XP', value: profile?.xp?.toLocaleString() || '0', icon: Zap, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+      { label: 'Battles Won', value: profile?.total_wins || '0', icon: Target, color: 'text-green-500', bg: 'bg-green-500/10' },
+    ];
+  }
 
   return (
-    <div className="flex h-screen bg-background text-foreground">
+    <div className="flex h-screen bg-background text-foreground overflow-hidden">
       <DashboardSidebar />
-      <main className="flex-1 overflow-auto">
-        <div className="p-8 space-y-8">
-          {/* Header with Avatar */}
-          <div className="flex items-start justify-between">
+      <main className="flex-1 overflow-auto bg-muted/5 relative">
+        {/* Ambient Background Gradient */}
+        <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
+
+        <div className="container max-w-6xl p-8 space-y-8 relative z-10">
+          {/* Header Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col md:flex-row md:items-start justify-between gap-6"
+          >
             <div className="flex items-start gap-6">
-              <div className="relative">
-                <Avatar className="w-24 h-24 border-2 border-primary/30">
-                  <AvatarImage src={avatarUrl || "/placeholder.svg"} />
-                  <AvatarFallback className="bg-primary/20 text-2xl">{getInitials(fullName)}</AvatarFallback>
-                </Avatar>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="absolute bottom-0 right-0 w-8 h-8 bg-primary hover:bg-primary/90 rounded-full flex items-center justify-center border-2 border-background transition-colors"
-                >
-                  <Upload className="w-4 h-4 text-primary-foreground" />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleAvatarChange}
-                />
-              </div>
-              <div className="space-y-2">
-                <h1 className="text-3xl font-bold">{fullName}</h1>
-                <p className="text-muted-foreground">Software Engineer | Interview Prep Expert</p>
-                <div className="flex items-center gap-2 mt-3">
-                  <Badge className="bg-accent/20 text-accent border-accent/30">@{userName}</Badge>
-                  <Badge variant="outline" className="border-border/50">
-                    <MapPin className="w-3 h-3 mr-1" />
-                    {location}
-                  </Badge>
+              <Avatar className="w-28 h-28 border-4 border-background shadow-xl">
+                <AvatarImage src={profile?.avatar_url} />
+                <AvatarFallback className="text-4xl bg-primary text-primary-foreground">
+                  {profile?.full_name?.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="space-y-2 mt-2">
+                <h1 className="text-4xl font-bold tracking-tight">{profile?.full_name}</h1>
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <p className="flex items-center gap-1">
+                    <Code className="w-4 h-4" />
+                    {profile?.role || 'Student'}
+                  </p>
+                  <span>•</span>
+                  <p className="flex items-center gap-1">
+                    <MapPin className="w-4 h-4" />
+                    {/* Location is not in DB yet, dynamic placeholder */}
+                    Remote
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <Badge variant="secondary" className="font-mono">@{profile?.username}</Badge>
+                  {(profile as any)?.bio && (
+                    <span className="text-sm text-muted-foreground ml-2 truncate max-w-md">
+                      {(profile as any).bio}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
-            <div className="flex gap-3">
-              <Button variant="outline" className="border-border/50 gap-2 bg-transparent">
-                <Edit2 className="w-4 h-4" />
-                Edit Profile
-              </Button>
-              <Button variant="outline" className="border-border/50 gap-2 bg-transparent">
+
+            <div className="flex gap-3 mt-4 md:mt-0">
+              <Link href="/settings">
+                <Button variant="outline" className="gap-2">
+                  <Edit2 className="w-4 h-4" />
+                  Edit Profile
+                </Button>
+              </Link>
+              <Button variant="ghost" size="icon">
                 <Share2 className="w-4 h-4" />
-                Share
               </Button>
             </div>
-          </div>
+          </motion.div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {userStats.map((stat) => {
-              const Icon = stat.icon;
-              return (
-                <Card key={stat.label} className="border-border/50 bg-card/50 p-6">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-muted-foreground text-sm">{stat.label}</p>
-                      <p className="text-2xl font-bold mt-2">{stat.value}</p>
-                    </div>
-                    <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
-                      <Icon className="w-5 h-5 text-primary" />
-                    </div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+          >
+            {stats.map((stat, i) => (
+              <Card key={i} className="border-border/50 bg-card/50 backdrop-blur-sm hover:bg-card/80 transition-all">
+                <CardContent className="p-6 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
+                    <p className="text-2xl font-bold mt-1">{stat.value}</p>
                   </div>
-                </Card>
-              );
-            })}
-          </div>
+                  <div className={`p-3 rounded-xl ${stat.bg}`}>
+                    <stat.icon className={`w-6 h-6 ${stat.color}`} />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </motion.div>
 
-          {/* Tabs */}
           <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="bg-card/50 border border-border/30">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="achievements">Achievements</TabsTrigger>
-              <TabsTrigger value="settings">Settings</TabsTrigger>
+            <TabsList className="bg-muted/50 p-1 border border-border/50 rounded-xl">
+              <TabsTrigger value="overview" className="rounded-lg px-6">Overview</TabsTrigger>
+              <TabsTrigger value="activity" className="rounded-lg px-6">Activity</TabsTrigger>
+              <TabsTrigger value="achievements" className="rounded-lg px-6">Achievements</TabsTrigger>
             </TabsList>
 
-            {/* Overview Tab */}
+            {/* OVERVIEW TAB */}
             <TabsContent value="overview" className="space-y-6">
               <div className="grid lg:grid-cols-3 gap-6">
-                {/* About Section */}
                 <div className="lg:col-span-2 space-y-6">
-                  <Card className="border-border/50 bg-card/50 p-6">
-                    <h3 className="text-lg font-bold mb-4">About</h3>
-                    <p className="text-muted-foreground">
-                      Passionate software engineer preparing for FAANG interviews. I love solving algorithmic problems and sharing knowledge with the community. Currently focused on System Design and Advanced Data Structures.
-                    </p>
+                  {/* Problem Solving Overview - Only for Students or Teachers who code */}
+                  <Card className="border-border/50 bg-card/50">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="w-5 h-5 text-primary" />
+                        Problem Solving Stats
+                      </CardTitle>
+                      <CardDescription>
+                        {profile?.role === 'TEACHER' ? 'Problems you have created or tested' : 'Your distribution across difficulty levels'}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex justify-center py-4">
+                        <ProblemDial
+                          easy={profile?.total_battles ? Math.floor(profile.total_battles * 0.4) : 12}
+                          medium={profile?.total_battles ? Math.floor(profile.total_battles * 0.5) : 8}
+                          hard={profile?.total_battles ? Math.floor(profile.total_battles * 0.1) : 3}
+                          total={profile?.total_battles || 23}
+                          size="md"
+                        />
+                      </div>
+                    </CardContent>
                   </Card>
 
-                  <Card className="border-border/50 bg-card/50 p-6">
-                    <h3 className="text-lg font-bold mb-4">Bio Information</h3>
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-4">
-                        <Mail className="w-5 h-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm text-muted-foreground">Email</p>
-                          <p className="font-semibold">john.doe@email.com</p>
+                  {/* Social Links (Dynamic) */}
+                  <div className="grid sm:grid-cols-3 gap-4">
+                    {[
+                      { label: 'GitHub', value: (profile as any)?.github_username, icon: Github, url: 'https://github.com/' },
+                      { label: 'Twitter', value: (profile as any)?.twitter_username, icon: Twitter, url: 'https://twitter.com/' },
+                      { label: 'Website', value: (profile as any)?.website, icon: Globe, url: '' }, // Direct URL
+                    ].map((item, i) => item.value ? (
+                      <a
+                        href={item.label === 'Website' ? item.value : `${item.url}${item.value}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        key={i}
+                        className="flex items-center gap-3 p-4 rounded-xl border border-border/50 bg-card/30 hover:bg-card/60 transition-colors"
+                      >
+                        <item.icon className="w-5 h-5 text-muted-foreground" />
+                        <div className="overflow-hidden">
+                          <p className="text-xs text-muted-foreground font-medium uppercase">{item.label}</p>
+                          <p className="text-sm font-semibold truncate">{item.value}</p>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <MapPin className="w-5 h-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm text-muted-foreground">Location</p>
-                          <p className="font-semibold">San Francisco, USA</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <LinkIcon className="w-5 h-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm text-muted-foreground">Website</p>
-                          <p className="font-semibold text-primary hover:underline cursor-pointer">
-                            johndoe.dev
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-
-                  <Card className="border-border/50 bg-card/50 p-6">
-                    <h3 className="text-lg font-bold mb-4">Recent Activity</h3>
-                    <div className="space-y-4">
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="pb-4 border-b border-border/30 last:border-b-0">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <p className="font-semibold">Won battle against CodeNinja23</p>
-                              <p className="text-sm text-muted-foreground">
-                                Problem: Two Sum in {i + 1} minutes
-                              </p>
-                            </div>
-                            <p className="text-xs text-muted-foreground">{i} hours ago</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
+                      </a>
+                    ) : null)}
+                  </div>
                 </div>
 
-                {/* Badges Sidebar */}
-                <Card className="border-border/50 bg-card/50 p-6 h-fit">
-                  <h3 className="text-lg font-bold mb-4">Latest Badges</h3>
-                  <div className="space-y-3">
-                    {badges.map((badge) => (
-                      <div
-                        key={badge.id}
-                        className="p-3 rounded-lg bg-card/50 border border-border/30"
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="w-8 h-8 bg-accent/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <Trophy className="w-4 h-4 text-accent" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-sm">{badge.name}</p>
-                            <p className="text-xs text-muted-foreground">{badge.date}</p>
-                          </div>
-                        </div>
+                {/* Sidebar Info */}
+                <div className="space-y-6">
+                  <Card className="border-border/50 bg-card/50">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Profile Details</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between py-2 border-b border-border/30">
+                        <span className="text-muted-foreground text-sm">Member Since</span>
+                        <span className="font-medium text-sm flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          {joinDate}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                </Card>
+                      <div className="flex items-center justify-between py-2 border-b border-border/30">
+                        <span className="text-muted-foreground text-sm">
+                          {profile?.role === 'TEACHER' ? 'Battles Created' : 'Total Battles'}
+                        </span>
+                        <span className="font-medium text-sm">
+                          {profile?.role === 'TEACHER' ? (profile.teacher_stats?.battles_held || 0) : (profile?.total_battles || 0)} Matches
+                        </span>
+                      </div>
+                      {profile?.role === 'STUDENT' && (
+                        <div className="flex items-center justify-between py-2 border-b border-border/30">
+                          <span className="text-muted-foreground text-sm">Win Rate</span>
+                          <span className="font-medium text-sm text-green-500">
+                            {profile?.total_battles ? Math.round(((profile.total_wins || 0) / profile.total_battles) * 100) : 0}%
+                          </span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Badges Preview */}
+                  <Card className="border-border/50 bg-gradient-to-br from-card/50 to-primary/5">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Award className="w-5 h-5 text-yellow-500" />
+                        Top Badges
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[1, 2, 3, 4, 5, 6].map((badge) => (
+                          <div key={badge} className="aspect-square rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center grayscale hover:grayscale-0 transition-all cursor-help" title="Badge Locked">
+                            <Trophy className="w-5 h-5 text-accent" />
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
             </TabsContent>
 
-            {/* Achievements Tab */}
-            <TabsContent value="achievements" className="space-y-6">
-              <Card className="border-border/50 bg-card/50 p-6">
-                <h3 className="text-lg font-bold mb-6">Achievements Unlocked</h3>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {achievements.map((achievement) => (
-                    <div
-                      key={achievement.id}
-                      className={`p-6 rounded-lg border ${
-                        achievement.unlocked
-                          ? 'border-accent/30 bg-accent/10'
-                          : 'border-border/30 bg-card/50 opacity-60'
-                      }`}
-                    >
-                      <div className="w-12 h-12 rounded-lg flex items-center justify-center mb-3 bg-accent/20">
-                        <Trophy className="w-6 h-6 text-accent" />
-                      </div>
-                      <h4 className="font-semibold">{achievement.name}</h4>
-                      <p className="text-sm text-muted-foreground mt-1">{achievement.description}</p>
-                      {achievement.unlocked && (
-                        <Badge className="mt-3 bg-accent/20 text-accent border-accent/30">
-                          Unlocked
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </Card>
-
-              <Card className="border-border/50 bg-card/50 p-6">
-                <h3 className="text-lg font-bold mb-4">Achievement Progress</h3>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <p className="text-sm font-semibold">Legend</p>
-                      <p className="text-sm text-muted-foreground">In Progress</p>
-                    </div>
-                    <div className="w-full bg-card rounded-full h-2">
-                      <div className="bg-accent rounded-full h-2" style={{ width: '78%' }} />
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">Reach rank #1 globally</p>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <p className="text-sm font-semibold">Tournament Winner</p>
-                      <p className="text-sm text-muted-foreground">In Progress</p>
-                    </div>
-                    <div className="w-full bg-card rounded-full h-2">
-                      <div className="bg-primary rounded-full h-2" style={{ width: '45%' }} />
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">Win a tournament</p>
-                  </div>
-                </div>
+            <TabsContent value="activity">
+              <Card className="border-border/50 bg-card/50 h-[400px] flex items-center justify-center text-muted-foreground">
+                Detailed activity history coming soon...
               </Card>
             </TabsContent>
 
-            {/* Settings Tab */}
-            <TabsContent value="settings" className="space-y-6">
-              {/* Profile Information */}
-              <Card className="border-border/50 bg-card/50 p-6">
-                <h3 className="text-lg font-bold mb-6">Profile Information</h3>
-                <div className="space-y-6">
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="fullName">Full Name</Label>
-                      <Input
-                        id="fullName"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        className="bg-card/50 border-border/50"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="username">Username</Label>
-                      <Input
-                        id="username"
-                        value={userName}
-                        onChange={(e) => setUserName(e.target.value.toLowerCase())}
-                        className="bg-card/50 border-border/50"
-                        prefix="@"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="bg-card/50 border-border/50"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="location">Location</Label>
-                    <Input
-                      id="location"
-                      value={location}
-                      onChange={(e) => setLocation(e.target.value)}
-                      className="bg-card/50 border-border/50"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="bio">Bio</Label>
-                    <Textarea
-                      id="bio"
-                      value={bio}
-                      onChange={(e) => setBio(e.target.value)}
-                      className="bg-card/50 border-border/50 min-h-24"
-                      placeholder="Tell us about yourself..."
-                    />
-                  </div>
-
-                  <Button className="bg-primary hover:bg-primary/90">Save Changes</Button>
-                </div>
-              </Card>
-
-              {/* Avatar Management */}
-              <Card className="border-border/50 bg-card/50 p-6">
-                <h3 className="text-lg font-bold mb-6">Avatar</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center gap-6">
-                    <Avatar className="w-20 h-20 border-2 border-primary/30">
-                      <AvatarImage src={avatarUrl || "/placeholder.svg"} />
-                      <AvatarFallback className="bg-primary/20">{getInitials(fullName)}</AvatarFallback>
-                    </Avatar>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Upload a new avatar (JPG, PNG, GIF)</p>
-                      <Button 
-                        variant="outline" 
-                        className="border-border/50 bg-transparent gap-2"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <Upload className="w-4 h-4" />
-                        Choose File
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Download & Export */}
-              <Card className="border-border/50 bg-card/50 p-6 border-primary/30">
-                <h3 className="text-lg font-bold mb-4 text-primary">Data & Export</h3>
-                <p className="text-muted-foreground mb-4">Download your progress data, achievements, and statistics as a JSON file.</p>
-                <Button 
-                  onClick={handleDownloadProgress}
-                  className="gap-2 bg-primary hover:bg-primary/90"
-                >
-                  <Download className="w-4 h-4" />
-                  Download My Progress
-                </Button>
-              </Card>
-
-              {/* Privacy & Notifications */}
-              <Card className="border-border/50 bg-card/50 p-6">
-                <h3 className="text-lg font-bold mb-6">Privacy & Notifications</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-card/50 border border-border/30">
-                    <div>
-                      <p className="font-semibold">Email Notifications</p>
-                      <p className="text-sm text-muted-foreground">Receive updates on activity</p>
-                    </div>
-                    <Button variant="outline" size="sm" className="border-border/50 bg-transparent">
-                      Configure
-                    </Button>
-                  </div>
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-card/50 border border-border/30">
-                    <div>
-                      <p className="font-semibold">Profile Visibility</p>
-                      <p className="text-sm text-muted-foreground">Other users can see your profile</p>
-                    </div>
-                    <Badge className="bg-primary/20 text-primary border-primary/30">Public</Badge>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Delete Account Section */}
-              <Card className="border-red-500/30 bg-red-950/10 p-6">
-                <div className="flex items-start gap-4">
-                  <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-1" />
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold mb-2 text-red-400">Danger Zone</h3>
-                    <p className="text-muted-foreground mb-4">
-                      Permanently delete your account and all associated data. This action cannot be undone.
-                    </p>
-                    {showDeleteConfirm ? (
-                      <div className="space-y-3 p-4 rounded-lg bg-red-950/30 border border-red-500/50">
-                        <p className="font-semibold text-red-300">Are you sure you want to delete your account?</p>
-                        <p className="text-sm text-muted-foreground">
-                          This will permanently delete your account and all progress. Type your username to confirm.
-                        </p>
-                        <div className="flex gap-3">
-                          <Button 
-                            variant="destructive" 
-                            onClick={handleDeleteAccount}
-                            className="gap-2"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Yes, Delete My Account
-                          </Button>
-                          <Button 
-                            variant="outline"
-                            onClick={() => setShowDeleteConfirm(false)}
-                            className="border-border/50 bg-transparent"
-                          >
-                            Cancel
-                          </Button>
-                        </div>
+            <TabsContent value="achievements">
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Mock Achievements until we hook up the table */}
+                {[
+                  { title: 'First Blood', desc: 'Win your first battle', unlocked: (profile?.total_wins || 0) > 0 },
+                  { title: 'Veteran', desc: 'Participate in 50 battles', unlocked: (profile?.total_battles || 0) > 50 },
+                  { title: 'Level Up', desc: 'Reach Level 5', unlocked: (profile?.level || 1) >= 5 },
+                ].map((ach, i) => (
+                  <Card key={i} className={`border-border/50 ${ach.unlocked ? 'bg-primary/5 border-primary/20' : 'bg-card/30 opacity-60'}`}>
+                    <CardContent className="p-6 flex items-start gap-4">
+                      <div className={`p-3 rounded-lg ${ach.unlocked ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                        <Award className="w-6 h-6" />
                       </div>
-                    ) : (
-                      <Button 
-                        variant="destructive"
-                        onClick={handleDeleteAccount}
-                        className="gap-2"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Delete Account
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </Card>
+                      <div>
+                        <h4 className="font-bold">{ach.title}</h4>
+                        <p className="text-sm text-muted-foreground">{ach.desc}</p>
+                        {ach.unlocked && <Badge variant="secondary" className="mt-2 text-[10px] h-5">Unlocked</Badge>}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </TabsContent>
           </Tabs>
         </div>
