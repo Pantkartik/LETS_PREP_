@@ -17,20 +17,20 @@ function AdvancedLoader() {
   useEffect(() => {
     // Faster sequence (2s total)
     const messages = [
-      { text: "Initializing handshake...", delay: 100 },
-      { text: "Verifying credentials...", delay: 400 },
-      { text: "Decrypting session token...", delay: 800 },
-      { text: "Handshaking with server...", delay: 1200 },
-      { text: "Establishing secure tunnel...", delay: 1500 },
-      { text: "Access Granted.", delay: 1900 },
+      { text: "Initializing handshake...", delay: 50 },
+      { text: "Verifying credentials...", delay: 150 },
+      { text: "Decrypting session token...", delay: 300 },
+      { text: "Handshaking with server...", delay: 450 },
+      { text: "Establishing secure tunnel...", delay: 600 },
+      { text: "Access Granted.", delay: 750 },
     ];
 
     let timeouts: NodeJS.Timeout[] = [];
 
     // Faster progress bar
     const progressInterval = setInterval(() => {
-      setProgress(p => (p >= 100 ? 100 : p + 2.5));
-    }, 30);
+      setProgress(p => (p >= 100 ? 100 : p + 5));
+    }, 20);
 
     messages.forEach(({ text, delay }, index) => {
       const t = setTimeout(() => {
@@ -237,8 +237,8 @@ export default function LoginPage() {
     }
 
     try {
-      // Faster delay (2000ms) for SNAPPY feel
-      const minDelay = new Promise(resolve => setTimeout(resolve, 2000));
+      // Snappy feel - wait only long enough to show the transition
+      const minDelay = new Promise(resolve => setTimeout(resolve, 400));
       const authPromise = supabase.auth.signInWithPassword({
         email,
         password,
