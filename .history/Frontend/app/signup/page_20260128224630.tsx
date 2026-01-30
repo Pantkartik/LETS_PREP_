@@ -47,24 +47,28 @@ export default function SignupPage() {
     }
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            name: formData.name,
-            role: userType.toUpperCase(),
-          },
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          role: userType.toUpperCase(),
+        }),
       });
 
-      if (error) {
-        setError(error.message);
-      } else if (data.user) {
+      const data = await response.json();
+
+      if (response.ok) {
         setSuccess('Account created successfully! Redirecting to login...');
         setTimeout(() => {
           router.push('/login');
         }, 2000);
+      } else {
+        setError(data.error || 'Failed to create account');
       }
     } catch (error) {
       setError('An error occurred. Please try again.');

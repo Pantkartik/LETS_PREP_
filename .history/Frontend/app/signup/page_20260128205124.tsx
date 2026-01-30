@@ -10,7 +10,6 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Code } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase-client';
 
 export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +17,6 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const router = useRouter();
-  const supabase = createClient();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -47,24 +45,28 @@ export default function SignupPage() {
     }
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            name: formData.name,
-            role: userType.toUpperCase(),
-          },
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          role: userType.toUpperCase(),
+        }),
       });
 
-      if (error) {
-        setError(error.message);
-      } else if (data.user) {
+      const data = await response.json();
+
+      if (response.ok) {
         setSuccess('Account created successfully! Redirecting to login...');
         setTimeout(() => {
           router.push('/login');
         }, 2000);
+      } else {
+        setError(data.error || 'Failed to create account');
       }
     } catch (error) {
       setError('An error occurred. Please try again.');
@@ -101,16 +103,6 @@ export default function SignupPage() {
             <div className="space-y-2">
               <h1 className="text-2xl font-bold">Create Your Account</h1>
               <p className="text-muted-foreground">Join LETS PREP and start your interview prep journey</p>
-              {error && (
-                <div className="text-red-500 text-sm bg-red-50 border border-red-200 rounded-md p-2">
-                  {error}
-                </div>
-              )}
-              {success && (
-                <div className="text-green-500 text-sm bg-green-50 border border-green-200 rounded-md p-2">
-                  {success}
-                </div>
-              )}
             </div>
 
             <div className="space-y-3">

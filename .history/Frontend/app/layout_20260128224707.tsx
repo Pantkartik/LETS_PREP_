@@ -39,9 +39,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`font-sans antialiased bg-background text-foreground`}>
-        <SupabaseAuthProvider>
+        <AuthProvider>
           {children}
-        </SupabaseAuthProvider>
+        </AuthProvider>
         <Analytics />
       </body>
     </html>

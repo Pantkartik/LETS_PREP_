@@ -1,6 +1,7 @@
 'use client';
 
 import React from "react"
+
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,16 +10,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import Link from 'next/link';
 import { useState } from 'react';
 import { Code } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase-client';
 
 export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [userType, setUserType] = useState('student');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const router = useRouter();
-  const supabase = createClient();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -29,48 +24,12 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError('');
-    setSuccess('');
-
-    // Validate passwords match
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
+    // Simulate signup
+    setTimeout(() => {
       setIsLoading(false);
-      return;
-    }
-
-    // Validate password length
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters long');
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            name: formData.name,
-            role: userType.toUpperCase(),
-          },
-        },
-      });
-
-      if (error) {
-        setError(error.message);
-      } else if (data.user) {
-        setSuccess('Account created successfully! Redirecting to login...');
-        setTimeout(() => {
-          router.push('/login');
-        }, 2000);
-      }
-    } catch (error) {
-      setError('An error occurred. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+      // In production, this would create account and redirect
+      window.location.href = '/dashboard';
+    }, 1000);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,16 +60,6 @@ export default function SignupPage() {
             <div className="space-y-2">
               <h1 className="text-2xl font-bold">Create Your Account</h1>
               <p className="text-muted-foreground">Join LETS PREP and start your interview prep journey</p>
-              {error && (
-                <div className="text-red-500 text-sm bg-red-50 border border-red-200 rounded-md p-2">
-                  {error}
-                </div>
-              )}
-              {success && (
-                <div className="text-green-500 text-sm bg-green-50 border border-green-200 rounded-md p-2">
-                  {success}
-                </div>
-              )}
             </div>
 
             <div className="space-y-3">
