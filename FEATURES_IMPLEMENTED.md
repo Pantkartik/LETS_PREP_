@@ -113,6 +113,22 @@
 
 ---
 
+### 6. **Classes Management Page (Teacher Portal)**
+- **Location**: `/classes`
+- **Features**:
+  - **Classroom Overview**: Visual cards for each class showing student count, average performance, and active battles.
+  - **Quick Stats**: At-a-glance metrics for total students, active sessions, and success rates.
+  - **Search & Filter**: Real-time searching of class cohorts.
+  - **Create Class Dialog**: Modern modal for setting up new student groups with capacity and difficulty settings.
+  - **Glassmorphism UI**: High-fidelity design with amber/orange teacher theme.
+
+**Files Created**:
+- `app/classes/page.tsx` - Main classes management page
+- `components/teacher/create-class-dialog.tsx` - Dialog for creating new classes
+- Updated `components/dashboard-sidebar.tsx` - Link to classes page
+
+---
+
 ## 🎯 How to Use
 
 ### **For Students**:

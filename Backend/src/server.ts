@@ -21,6 +21,7 @@ import problemRoutes from './routes/problem.routes';
 import submissionRoutes from './routes/submission.routes';
 import userRoutes from './routes/user.routes';
 import tournamentRoutes from './routes/tournament.routes';
+import executorRoutes from './routes/executor.routes';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
@@ -114,6 +115,7 @@ class Server {
         this.app.use(`${apiPrefix}/submissions`, authMiddleware, submissionRoutes);
         this.app.use(`${apiPrefix}/users`, authMiddleware, userRoutes);
         this.app.use(`${apiPrefix}/tournaments`, authMiddleware, tournamentRoutes);
+        this.app.use(`${apiPrefix}/executor`, executorRoutes); // Code execution endpoint
 
         // API documentation
         this.app.get(`${apiPrefix}`, (req, res) => {
