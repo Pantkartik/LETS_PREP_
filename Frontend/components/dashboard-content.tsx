@@ -5,18 +5,21 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import ActivityHeatmap from '@/components/activity-heatmap';
-import { 
-  Flame, 
-  Trophy, 
-  Zap, 
-  Brain, 
-  Users, 
+import {
+  Flame,
+  Trophy,
+  Zap,
+  Brain,
+  Users,
   Target,
   TrendingUp,
   Plus,
   Play,
-  Clock
+  Clock,
+  UserPlus
 } from 'lucide-react';
+import { JoinClassDialog } from '@/components/student/join-class-dialog';
+import { MyClassrooms } from '@/components/student/my-classrooms';
 
 const performanceData = [
   { topic: 'Arrays', correct: 85, total: 100 },
@@ -165,7 +168,7 @@ export function DashboardContent() {
         {/* Left Column - Battles & Actions */}
         <div className="lg:col-span-2 space-y-6">
           {/* Quick Action Buttons */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <Button size="lg" className="bg-primary hover:bg-primary/90 gap-2 h-auto py-4">
               <Zap className="w-5 h-5" />
               <div className="text-left">
@@ -180,6 +183,15 @@ export function DashboardContent() {
                 <div className="text-xs opacity-90">AI practice</div>
               </div>
             </Button>
+            <JoinClassDialog>
+              <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600 gap-2 h-auto py-4 w-full">
+                <UserPlus className="w-5 h-5" />
+                <div className="text-left">
+                  <div className="font-semibold">Join Class</div>
+                  <div className="text-xs opacity-90">Enter code</div>
+                </div>
+              </Button>
+            </JoinClassDialog>
           </div>
 
           {/* Upcoming Battles */}
@@ -218,6 +230,9 @@ export function DashboardContent() {
               ))}
             </div>
           </Card>
+
+          {/* My Classrooms */}
+          <MyClassrooms />
         </div>
 
         {/* Right Column - Stats & Progress */}
@@ -288,8 +303,8 @@ export function DashboardContent() {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis dataKey="topic" stroke="var(--color-muted-foreground)" />
               <YAxis stroke="var(--color-muted-foreground)" />
-              <Tooltip 
-                contentStyle={{ 
+              <Tooltip
+                contentStyle={{
                   backgroundColor: 'var(--color-card)',
                   border: '1px solid var(--color-border)',
                   borderRadius: '8px'
@@ -308,17 +323,17 @@ export function DashboardContent() {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis dataKey="day" stroke="var(--color-muted-foreground)" />
               <YAxis stroke="var(--color-muted-foreground)" />
-              <Tooltip 
-                contentStyle={{ 
+              <Tooltip
+                contentStyle={{
                   backgroundColor: 'var(--color-card)',
                   border: '1px solid var(--color-border)',
                   borderRadius: '8px'
                 }}
               />
-              <Line 
-                type="monotone" 
-                dataKey="count" 
-                stroke="var(--color-accent)" 
+              <Line
+                type="monotone"
+                dataKey="count"
+                stroke="var(--color-accent)"
                 strokeWidth={2}
                 dot={{ fill: 'var(--color-accent)' }}
               />

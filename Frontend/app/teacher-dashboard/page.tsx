@@ -5,8 +5,12 @@ import DashboardClient from '@/components/teacher/dashboard-client'
 
 export default async function TeacherDashboardPage() {
     const stats = await getTeacherDashboardStats()
-    const recentRooms = await getTeacherGameRooms() // Fetch recent tournaments
-    const activeBattles = await getTeacherBattles() // Fetch battles
+    const recentRoomsResult = await getTeacherGameRooms() // Fetch recent tournaments
+    const activeBattlesResult = await getTeacherBattles() // Fetch battles
 
-    return <DashboardClient stats={stats} recentRooms={recentRooms} activeBattles={activeBattles} />
+    return <DashboardClient
+        stats={stats}
+        recentRooms={recentRoomsResult.rooms || []}
+        activeBattles={activeBattlesResult.battles || []}
+    />
 }

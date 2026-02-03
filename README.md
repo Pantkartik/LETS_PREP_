@@ -5,7 +5,12 @@
 [![Next.js](https://img.shields.io/badge/Next.js-16.0-black)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
 
-A modern, full-stack competitive programming platform with real-time code execution, battle rooms, and comprehensive analytics.
+**LETS_PREP** is a real-time educational platform designed to streamline coding education through virtual classrooms and live competitive programming contests. In modern academic and technical training environments, educators often rely on disjointed tools for curriculum management, code compilation, and student assessment. This fragmentation leads to inefficiencies, administrative overhead, delayed feedback loops, and a lack of cohesive performance tracking.
+
+- **LETS_PREP** addresses these challenges by offering a centralized environment where teachers can collaboratively manage classrooms, curate problem sets, and host live coding battles with automated grading.
+- The platform ensures seamless code execution across multiple languages (Python, Java, C++, JavaScript), maintains real-time leaderboards for student engagement, enforces secure role-based access control, and provides a scalable backend capable of handling concurrent submissions with low latency.
+
+The project demonstrates practical implementation of modern full-stack development, real-time database synchronization, secure code execution architecture, and cloud-native authentication practices. It is suitable for academic evaluation as well as a professional portfolio-grade project.
 
 ## 📋 Table of Contents
 

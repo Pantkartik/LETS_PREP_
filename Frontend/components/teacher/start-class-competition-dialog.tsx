@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,25 +11,24 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Trophy,
-    Users,
     Clock,
     Zap,
-    CheckCircle2,
-    AlertCircle,
-    Loader2
+    Loader2,
+    AlertCircle
 } from 'lucide-react';
-import { createCompetition, getAvailableProblems } from '@/lib/actions/teacher-competitions';
+import { createCompetition, getAvailableProblems, startCompetition } from '@/lib/actions/teacher-competitions';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 
-interface CreateCompetitionDialogProps {
+interface StartClassCompetitionDialogProps {
     classroomId: string;
     className: string;
 }
 
-export function CreateCompetitionDialog({ classroomId, className }: CreateCompetitionDialogProps) {
+export function StartClassCompetitionDialog({ classroomId, className }: StartClassCompetitionDialogProps) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [loadingProblems, setLoadingProblems] = useState(false);
     const [problems, setProblems] = useState<any[]>([]);
     const [selectedProblems, setSelectedProblems] = useState<string[]>([]);
     const router = useRouter();
@@ -41,27 +40,28 @@ export function CreateCompetitionDialog({ classroomId, className }: CreateCompet
         maxParticipants: 100
     });
 
-    const loadProblems = useCallback(async () => {
-        if (problems.length > 0) return; // Don't reload if already loaded
-
-        try {
-            const result = await getAvailableProblems();
-            if (result.success && result.problems) {
-                setProblems(result.problems);
-            } else {
+    // Load problems when button is clicked, BEFORE opening dialog
+    const handleOpenDialog = async () => {
+        if (problems.length === 0) {
+            setLoadingProblems(true);
+            try {
+                const result = await getAvailableProblems();
+                if (result.success && result.problems) {
+                    setProblems(result.problems);
+                    setOpen(true); // Only open after problems are loaded
+                } else {
+                    toast.error('Failed to load problems');
+                }
+            } catch (error) {
+                console.error('Error loading problems:', error);
                 toast.error('Failed to load problems');
+            } finally {
+                setLoadingProblems(false);
             }
-        } catch (error) {
-            console.error('Error loading problems:', error);
-            toast.error('Failed to load problems');
+        } else {
+            setOpen(true); // Problems already loaded, just open
         }
-    }, [problems.length]);
-
-    useEffect(() => {
-        if (open) {
-            loadProblems();
-        }
-    }, [open, loadProblems]);
+    };
 
     const toggleProblem = (problemId: string) => {
         setSelectedProblems(prev => {
@@ -86,7 +86,8 @@ export function CreateCompetitionDialog({ classroomId, className }: CreateCompet
 
         setLoading(true);
         try {
-            const result = await createCompetition({
+            // Create competition
+            const createResult = await createCompetition({
                 classroomId,
                 title: formData.title,
                 description: formData.description,
@@ -95,12 +96,20 @@ export function CreateCompetitionDialog({ classroomId, className }: CreateCompet
                 maxParticipants: formData.maxParticipants
             });
 
-            if (result.success && result.competition) {
-                toast.success('Competition created successfully!');
+            if (!createResult.success || !createResult.competition) {
+                toast.error(createResult.error || 'Failed to create competition');
+                return;
+            }
+
+            // Start competition immediately
+            const startResult = await startCompetition(createResult.competition.id);
+
+            if (startResult.success) {
+                toast.success('Competition started! All students have been registered.');
                 setOpen(false);
-                router.push(`/competitions/${result.competition.id}`);
+                router.refresh();
             } else {
-                toast.error(result.error || 'Failed to create competition');
+                toast.error(startResult.error || 'Failed to start competition');
             }
         } catch (error) {
             toast.error('An unexpected error occurred');
@@ -120,17 +129,29 @@ export function CreateCompetitionDialog({ classroomId, className }: CreateCompet
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-bold shadow-lg shadow-purple-500/20 group">
-                    <Trophy className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform" />
-                    Create Competition
-                </Button>
-            </DialogTrigger>
+            <Button
+                onClick={handleOpenDialog}
+                disabled={loadingProblems}
+                className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-bold shadow-lg shadow-purple-500/20 group"
+            >
+                {loadingProblems ? (
+                    <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Loading...
+                    </>
+                ) : (
+                    <>
+                        <Trophy className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform" />
+                        Start Competition
+                    </>
+                )}
+            </Button>
+
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-card border-white/10">
                 <DialogHeader>
                     <DialogTitle className="text-2xl font-bold flex items-center gap-2">
                         <Trophy className="w-6 h-6 text-purple-500" />
-                        Create New Competition
+                        Start Competition for {className}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -259,6 +280,19 @@ export function CreateCompetitionDialog({ classroomId, className }: CreateCompet
                         </Card>
                     </div>
 
+                    {/* Warning */}
+                    <Card className="p-4 bg-orange-500/10 border-orange-500/20">
+                        <div className="flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 text-orange-500 mt-0.5" />
+                            <div>
+                                <p className="text-sm font-bold text-orange-200">Competition will start immediately</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    All students in this classroom will be automatically registered and notified.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+
                     {/* Actions */}
                     <div className="flex gap-3 justify-end pt-4 border-t border-white/10">
                         <Button
@@ -277,12 +311,12 @@ export function CreateCompetitionDialog({ classroomId, className }: CreateCompet
                             {loading ? (
                                 <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Creating...
+                                    Starting...
                                 </>
                             ) : (
                                 <>
                                     <Trophy className="w-4 h-4 mr-2" />
-                                    Create Competition
+                                    Start Competition
                                 </>
                             )}
                         </Button>

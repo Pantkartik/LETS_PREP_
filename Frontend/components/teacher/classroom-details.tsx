@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Users,
@@ -35,7 +35,7 @@ import {
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { createClient } from '@/lib/supabase-client';
-import { CreateCompetitionDialog } from './create-competition-dialog';
+import { QuickStartCompetition } from './quick-start-competition';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -48,7 +48,7 @@ export default function ClassroomDetails({ initialClassroom, initialStudents }: 
     const [students, setStudents] = useState(initialStudents);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('students');
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
 
     // Set up real-time subscription for student joins
     useEffect(() => {
@@ -93,7 +93,7 @@ export default function ClassroomDetails({ initialClassroom, initialStudents }: 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [initialClassroom.id, supabase]);
+    }, [initialClassroom.id]);
 
     const filteredStudents = students.filter(s =>
     (s.profile.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -164,7 +164,6 @@ export default function ClassroomDetails({ initialClassroom, initialStudents }: 
                     </div>
 
                     <div className="flex flex-col gap-3 min-w-[200px]">
-                        <CreateCompetitionDialog classroomId={initialClassroom.id} className={initialClassroom.name} />
                         <p className="text-[10px] text-center text-muted-foreground uppercase tracking-widest font-bold">
                             Live sync enabled <span className="inline-block w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse ml-1" />
                         </p>
@@ -341,7 +340,10 @@ export default function ClassroomDetails({ initialClassroom, initialStudents }: 
                                     <p className="text-muted-foreground text-xs font-medium">No active battles currently running for this class.</p>
                                 </div>
                             </div>
-                            <CreateCompetitionDialog classroomId={initialClassroom.id} className={initialClassroom.name} />
+                            <QuickStartCompetition
+                                classroomId={initialClassroom.id}
+                                className={initialClassroom.name}
+                            />
                         </div>
 
                         {/* Recent History Placeholder */}

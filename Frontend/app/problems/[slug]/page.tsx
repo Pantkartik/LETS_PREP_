@@ -658,15 +658,90 @@ export default function ProblemWorkspace() {
                                             onChange={(val) => setCode(val || '')}
                                             theme="vs-dark"
                                             options={{
+                                                // Editor appearance
                                                 minimap: { enabled: false },
                                                 fontSize: 14,
+                                                lineHeight: 21,
+                                                fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+                                                fontLigatures: true,
+
+                                                // Line numbers and gutter
                                                 lineNumbers: 'on',
+                                                lineNumbersMinChars: 3,
+                                                glyphMargin: false,
+                                                folding: true,
+
+                                                // Scrolling
                                                 scrollBeyondLastLine: false,
-                                                automaticLayout: true,
-                                                padding: { top: 16 },
-                                                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                                                cursorSmoothCaretAnimation: "on",
                                                 smoothScrolling: true,
+                                                mouseWheelScrollSensitivity: 1,
+
+                                                // Cursor
+                                                cursorStyle: 'line',
+                                                cursorBlinking: 'smooth',
+                                                cursorSmoothCaretAnimation: 'on',
+
+                                                // Layout
+                                                automaticLayout: true,
+                                                padding: { top: 16, bottom: 16 },
+
+                                                // Editing features
+                                                tabSize: 4,
+                                                insertSpaces: true,
+                                                detectIndentation: true,
+                                                trimAutoWhitespace: true,
+                                                autoIndent: 'full',
+                                                formatOnPaste: true,
+                                                formatOnType: true,
+
+                                                // Bracket matching
+                                                matchBrackets: 'always',
+                                                autoClosingBrackets: 'always',
+                                                autoClosingQuotes: 'always',
+                                                autoSurround: 'languageDefined',
+
+                                                // IntelliSense
+                                                quickSuggestions: {
+                                                    other: true,
+                                                    comments: false,
+                                                    strings: false
+                                                },
+                                                suggestOnTriggerCharacters: true,
+                                                acceptSuggestionOnCommitCharacter: true,
+                                                acceptSuggestionOnEnter: 'on',
+                                                tabCompletion: 'on',
+                                                wordBasedSuggestions: 'matchingDocuments',
+
+                                                // Code lens and hints
+                                                codeLens: false,
+                                                parameterHints: {
+                                                    enabled: true,
+                                                    cycle: true
+                                                },
+
+                                                // Selection and find
+                                                selectOnLineNumbers: true,
+                                                selectionHighlight: true,
+                                                occurrencesHighlight: 'singleFile',
+                                                find: {
+                                                    seedSearchStringFromSelection: 'selection',
+                                                    autoFindInSelection: 'never'
+                                                },
+
+                                                // Rendering
+                                                renderLineHighlight: 'all',
+                                                renderWhitespace: 'selection',
+                                                renderControlCharacters: false,
+
+                                                // Performance
+                                                fastScrollSensitivity: 5,
+                                                scrollbar: {
+                                                    vertical: 'auto',
+                                                    horizontal: 'auto',
+                                                    useShadows: true,
+                                                    verticalScrollbarSize: 10,
+                                                    horizontalScrollbarSize: 10
+                                                }
                                             }}
                                         />
                                     </div>

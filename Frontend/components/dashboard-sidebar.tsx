@@ -21,6 +21,7 @@ import {
   Bot,
   Award,
   Book,
+  GraduationCap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -167,6 +168,7 @@ const DashboardSidebarComponent = () => {
     { label: 'Settings', icon: Settings, href: '/settings' },
   ] : [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
+    { label: 'My Classrooms', icon: GraduationCap, href: '/my-classrooms' },
     { label: 'Battle Arena', icon: Swords, href: '/battles' },
     { label: 'Problem Bank', icon: Code, href: '/problems' },
     { label: 'Interview Simulator', icon: Bot, href: '/interviews' },

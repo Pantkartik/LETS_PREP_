@@ -48,7 +48,7 @@ export default function ClassesPage() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [classesData, roomsData] = await Promise.all([
+            const [classesData, roomsResult] = await Promise.all([
                 getTeacherClasses(),
                 getTeacherGameRooms()
             ]);
@@ -56,7 +56,8 @@ export default function ClassesPage() {
             setClasses(classesData);
 
             // Count rooms that are strictly ACTIVE (matching dashboard logic)
-            const activeCount = roomsData.filter((r: any) => r.status === 'ACTIVE').length;
+            const rooms = roomsResult.rooms || [];
+            const activeCount = rooms.filter((r: any) => r.status === 'ACTIVE').length;
             setActiveSessionsCount(activeCount);
         } catch (error) {
             console.error('Error loading classes data:', error);

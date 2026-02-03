@@ -229,8 +229,53 @@ export class CodeExecutor {
         return input.map(i => JSON.stringify(i)).join(', ');
     }
 
+    /**
+     * Smart output comparison that handles various edge cases
+     * Matches the backend implementation for consistency
+     */
     private static compareOutputs(actual: any, expected: any): boolean {
-        return JSON.stringify(actual) === JSON.stringify(expected);
+        // Direct comparison
+        if (actual === expected) {
+            return true;
+        }
+
+        // Deep equality for objects and arrays
+        if (typeof actual === 'object' && typeof expected === 'object') {
+            return JSON.stringify(actual) === JSON.stringify(expected);
+        }
+
+        // String comparison with normalization
+        const actualStr = String(actual).trim();
+        const expectedStr = String(expected).trim();
+
+        if (actualStr === expectedStr) {
+            return true;
+        }
+
+        // Floating point comparison with tolerance
+        if (typeof actual === 'number' && typeof expected === 'number') {
+            return Math.abs(actual - expected) < 1e-6;
+        }
+
+        // Try parsing as numbers
+        const actualNum = parseFloat(actualStr);
+        const expectedNum = parseFloat(expectedStr);
+        if (!isNaN(actualNum) && !isNaN(expectedNum)) {
+            return Math.abs(actualNum - expectedNum) < 1e-6;
+        }
+
+        // Array comparison (handles different formats)
+        try {
+            const actualArray = JSON.parse(actualStr);
+            const expectedArray = JSON.parse(expectedStr);
+            if (Array.isArray(actualArray) && Array.isArray(expectedArray)) {
+                return JSON.stringify(actualArray) === JSON.stringify(expectedArray);
+            }
+        } catch {
+            // Not valid JSON
+        }
+
+        return false;
     }
 
     private static getTestCases(problemSlug: string): TestCase[] {
