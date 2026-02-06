@@ -3,9 +3,13 @@ import DashboardSidebar from '@/components/dashboard-sidebar'
 import CompetitionsManager from '@/components/teacher/competitions-manager'
 import { getTeacherGameRooms } from '@/lib/actions/teacher-competitions'
 
+// Mark as dynamic since we use cookies for auth
+export const dynamic = 'force-dynamic'
+
 export default async function TeacherCompetitionsPage() {
   // Fetch data on the server
-  const gameRooms = await getTeacherGameRooms()
+  const result = await getTeacherGameRooms()
+  const gameRooms = result?.rooms || []
 
   return (
     <div className="min-h-screen bg-background text-foreground flex">
