@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSupabaseAuth } from '@/components/supabase-auth-provider';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import {
   Home,
   Zap,
@@ -22,10 +23,15 @@ import {
   Award,
   Book,
   GraduationCap,
+  Menu,
+  ShieldAlert,
+  Database,
+  Lock,
+  XCircle,
+  Power,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldAlert, Database, Lock, XCircle, Power } from 'lucide-react';
 
 function LogoutOverlay({ onComplete }: { onComplete: () => void }) {
   const [logs, setLogs] = useState<string[]>([]);
@@ -129,12 +135,68 @@ function LogoutOverlay({ onComplete }: { onComplete: () => void }) {
   );
 }
 
+interface SidebarContentProps {
+  navItems: any[];
+  pathname: string;
+  handleLogout: () => void;
+  onLinkClick?: () => void;
+}
+
+const SidebarContent = ({ navItems, pathname, handleLogout, onLinkClick }: SidebarContentProps) => (
+  <div className="flex flex-col h-full">
+    {/* Logo */}
+    <Link href="/" className="flex items-center gap-2 p-6 border-b border-border/30" onClick={onLinkClick}>
+      <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center">
+        <Code className="w-5 h-5 text-primary-foreground" />
+      </div>
+      <span className="font-bold text-lg">LET'S PREP</span>
+    </Link>
+
+    {/* Navigation */}
+    <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+      {/* Main Menu */}
+      <div className="space-y-1">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href;
+          return (
+            <Link key={item.href} href={item.href} onClick={onLinkClick}>
+              <Button
+                variant={isActive ? 'default' : 'ghost'}
+                className={`w-full justify-start gap-3 ${isActive
+                  ? 'bg-primary hover:bg-primary/90'
+                  : 'hover:bg-card'
+                  }`}
+              >
+                <item.icon className="w-4 h-4" />
+                {item.label}
+              </Button>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+
+    {/* Footer */}
+    <div className="p-4 border-t border-border/30 space-y-2">
+      <Button
+        variant="ghost"
+        className="w-full justify-start gap-3 text-red-400 hover:text-red-500 hover:bg-red-500/10"
+        onClick={handleLogout}
+      >
+        <LogOut className="w-4 h-4" />
+        Log Out
+      </Button>
+    </div>
+  </div>
+);
+
 const DashboardSidebarComponent = () => {
   const pathname = usePathname();
 
   const { signOut, profile, user } = useSupabaseAuth();
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -181,61 +243,48 @@ const DashboardSidebarComponent = () => {
     { label: 'Settings', icon: Settings, href: '/settings' },
   ];
 
-  // Prevent hydration mismatch by initially rendering a consistent state (or nothing) if needed
-  // However, for sidebar, we usually want SEO / quick visual. 
-  // Code staleness was likely the issue, but 'isMounted' ensures we can handle client-only logic safely if needed in future.
-  // For now, simply re-saving this file with the 'isMounted' hook (even unused effectively) will trigger a rebuild.
+  if (!isMounted) {
+    return (
+      <aside className="w-64 border-r border-border/30 bg-card/50 h-screen sticky top-0 hidden md:flex flex-col">
+        {/* Placeholder for SSR */}
+      </aside>
+    )
+  }
 
   return (
-    <aside className="w-64 border-r border-border/30 bg-card/50 h-screen sticky top-0 flex flex-col">
+    <>
       <AnimatePresence>
         {isLoggingOut && <LogoutOverlay onComplete={completeSignOut} />}
       </AnimatePresence>
 
-      {/* Logo */}
-      <Link href="/" className="flex items-center gap-2 p-6 border-b border-border/30">
-        <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center">
-          <Code className="w-5 h-5 text-primary-foreground" />
-        </div>
-        <span className="font-bold text-lg">LET'S PREP</span>
-      </Link>
-
-      {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {/* Main Menu */}
-        <div className="space-y-1">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link key={item.href} href={item.href}>
-                <Button
-                  variant={isActive ? 'default' : 'ghost'}
-                  className={`w-full justify-start gap-3 ${isActive
-                    ? 'bg-primary hover:bg-primary/90'
-                    : 'hover:bg-card'
-                    }`}
-                >
-                  <item.icon className="w-4 h-4" />
-                  {item.label}
-                </Button>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
-
-      {/* Footer */}
-      <div className="p-4 border-t border-border/30 space-y-2">
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 text-red-400 hover:text-red-500 hover:bg-red-500/10"
-          onClick={handleLogout}
-        >
-          <LogOut className="w-4 h-4" />
-          Log Out
-        </Button>
+      {/* Mobile Trigger */}
+      <div className="md:hidden fixed top-3 left-3 z-40">
+        <Sheet open={isOpen} onOpenChange={setIsOpen}>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="icon" className="bg-background/80 backdrop-blur-md shadow-md">
+              <Menu className="w-5 h-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0 w-72 bg-card/95 backdrop-blur-xl border-r border-border/50">
+            <SidebarContent
+              navItems={navItems}
+              pathname={pathname}
+              handleLogout={handleLogout}
+              onLinkClick={() => setIsOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
       </div>
-    </aside>
+
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex w-64 border-r border-border/30 bg-card/50 h-screen sticky top-0 flex-col">
+        <SidebarContent
+          navItems={navItems}
+          pathname={pathname}
+          handleLogout={handleLogout}
+        />
+      </aside>
+    </>
   );
 };
 
