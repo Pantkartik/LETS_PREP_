@@ -133,9 +133,9 @@ export default function ResourcesPage() {
                             <TabsTrigger value="sheets">Cheat Sheets</TabsTrigger>
                         </TabsList>
 
+                        {/* TAB: ALL */}
                         <TabsContent value="all" className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-                            {/* Learning Paths */}
                             <section className="space-y-6">
                                 <div className="flex items-center justify-between border-b pb-4 border-border/40">
                                     <h2 className="text-2xl font-bold flex items-center gap-2">
@@ -165,16 +165,12 @@ export default function ResourcesPage() {
                                 </div>
                             </section>
 
-                            {/* Resource Grid */}
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                                {/* Videos */}
                                 <div className="lg:col-span-2 space-y-6">
                                     <div className="flex items-center gap-2 border-b pb-4 border-border/40 mb-6">
                                         <Youtube className="w-6 h-6 text-red-500" />
                                         <h2 className="text-2xl font-bold">University & Expert Lectures</h2>
                                     </div>
-
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         {videoResources.map((video) => (
                                             <a key={video.title} href={video.url} target="_blank" rel="noopener noreferrer">
@@ -195,13 +191,11 @@ export default function ResourcesPage() {
                                     </div>
                                 </div>
 
-                                {/* Cheat Sheets & Tools */}
                                 <div className="space-y-6">
                                     <div className="flex items-center gap-2 border-b pb-4 border-border/40 mb-6">
                                         <FileText className="w-6 h-6 text-blue-500" />
                                         <h2 className="text-2xl font-bold">Quick Ref</h2>
                                     </div>
-
                                     <Card className="bg-card/50 shadow-inner">
                                         <CardContent className="p-0">
                                             <ScrollArea className="h-[400px]">
@@ -232,7 +226,6 @@ export default function ResourcesPage() {
                                         </CardFooter>
                                     </Card>
 
-                                    {/* Open Source Spotlight */}
                                     <Card className="bg-gradient-to-br from-card to-background border-primary/10">
                                         <CardHeader className="pb-2">
                                             <CardTitle className="text-sm font-medium uppercase text-muted-foreground tracking-wider flex items-center gap-2">
@@ -257,8 +250,78 @@ export default function ResourcesPage() {
                                     </Card>
                                 </div>
                             </div>
-
                         </TabsContent>
+
+                        {/* TAB: ROADMAPS */}
+                        <TabsContent value="roadmaps" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {roadmaps.map((map) => (
+                                    <a key={map.title} href={map.url} target="_blank" rel="noopener noreferrer" className="block h-full">
+                                        <Card className="group h-full hover:border-primary/50 transition-all hover:shadow-lg hover:-translate-y-1 bg-card/40 backdrop-blur-sm">
+                                            <CardHeader className="flex flex-row items-start gap-4 space-y-0">
+                                                <div className={`w-12 h-12 rounded-xl bg-background/80 flex items-center justify-center group-hover:scale-110 transition-transform ${map.color} shadow-sm border border-border/50`}>
+                                                    <map.icon className="w-6 h-6" />
+                                                </div>
+                                                <div>
+                                                    <CardTitle className="text-lg group-hover:text-primary transition-colors">{map.title}</CardTitle>
+                                                    <Badge variant="outline" className="mt-1 font-normal text-xs text-muted-foreground">{map.provider}</Badge>
+                                                </div>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <CardDescription className="text-base">{map.description}</CardDescription>
+                                            </CardContent>
+                                        </Card>
+                                    </a>
+                                ))}
+                            </div>
+                        </TabsContent>
+
+                        {/* TAB: VIDEOS */}
+                        <TabsContent value="videos" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {videoResources.map((video) => (
+                                    <a key={video.title} href={video.url} target="_blank" rel="noopener noreferrer">
+                                        <Card className="overflow-hidden hover:ring-2 hover:ring-primary/50 transition-all cursor-pointer border-0 shadow-md bg-card group">
+                                            <div className={`h-48 w-full bg-gradient-to-br ${video.thumbnail} to-background relative flex items-center justify-center overflow-hidden`}>
+                                                <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center group-hover:scale-110 transition-transform">
+                                                    <div className="ml-1 w-0 h-0 border-t-[10px] border-t-transparent border-l-[16px] border-l-white border-b-[10px] border-b-transparent" />
+                                                </div>
+                                                <Badge className="absolute bottom-3 right-3 bg-black/80 hover:bg-black/80 backdrop-blur-sm text-sm">{video.duration}</Badge>
+                                            </div>
+                                            <CardContent className="p-4">
+                                                <h3 className="font-semibold text-lg line-clamp-1 group-hover:text-primary transition-colors">{video.title}</h3>
+                                                <p className="text-sm text-muted-foreground mt-1">{video.channel} • {video.views}</p>
+                                            </CardContent>
+                                        </Card>
+                                    </a>
+                                ))}
+                            </div>
+                        </TabsContent>
+
+                        {/* TAB: CHEAT SHEETS */}
+                        <TabsContent value="sheets" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {cheatSheets.map((sheet) => (
+                                    <a key={sheet.title} href={sheet.url} target="_blank" rel="noopener noreferrer" className="block">
+                                        <Card className="p-6 flex items-center justify-between hover:bg-primary/5 transition-colors cursor-pointer group h-full">
+                                            <div className="flex items-center gap-4">
+                                                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-sm ring-1 ring-primary/20">
+                                                    {sheet.type}
+                                                </div>
+                                                <div>
+                                                    <div className="font-bold text-base group-hover:text-primary transition-colors">{sheet.title}</div>
+                                                    <Badge variant="secondary" className="mt-1 text-xs">{sheet.size}</Badge>
+                                                </div>
+                                            </div>
+                                            <Button variant="ghost" size="icon" className="h-10 w-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <ExternalLink className="w-5 h-5" />
+                                            </Button>
+                                        </Card>
+                                    </a>
+                                ))}
+                            </div>
+                        </TabsContent>
+
                     </Tabs>
 
                 </div>
