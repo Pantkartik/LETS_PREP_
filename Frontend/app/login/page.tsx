@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Code, Terminal, Sparkles, ArrowRight, User, Lock, Mail, Bot, Zap, Trophy, Loader2, Check, Shield } from 'lucide-react';
 import { createClient } from '@/lib/supabase-client';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 
 function AdvancedLoader() {
@@ -198,7 +199,7 @@ export default function LoginPage() {
   const [botState, setBotState] = useState<'idle' | 'typing' | 'success' | 'error'>('idle');
 
   const router = useRouter();
-  const [supabase, setSupabase] = useState<any>(null);
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
 
   // Gamification: Calculate progress
   const progress = (
@@ -213,7 +214,7 @@ export default function LoginPage() {
       setSupabase(client);
     } catch (error) {
       console.error('Supabase not configured:', error);
-      setError('System Error: Auth module missing env vars.');
+      setError('System Error: Auth env vars missing. Restart server?');
     }
   }, []);
 

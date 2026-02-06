@@ -30,11 +30,12 @@ export class CodeExecutor {
         code: string,
         language: string,
         problemSlug: string,
-        authToken?: string
+        authToken?: string,
+        customTestCases?: TestCase[]
     ): Promise<ExecutionResult> {
         // Try backend API first for all languages
         try {
-            const backendResult = await this.executeViaBackend(code, language, problemSlug, authToken);
+            const backendResult = await this.executeViaBackend(code, language, problemSlug, authToken, customTestCases);
             if (backendResult) return backendResult;
         } catch (error) {
             console.log('Backend unavailable, falling back to client-side execution for JavaScript');
@@ -42,7 +43,7 @@ export class CodeExecutor {
 
         // Fallback to client-side execution for JavaScript only
         if (language === 'javascript') {
-            return this.executeClientSide(code, problemSlug);
+            return this.executeClientSide(code, problemSlug, customTestCases);
         }
 
         // For other languages without backend, show error
@@ -53,10 +54,11 @@ export class CodeExecutor {
         code: string,
         language: string,
         problemSlug: string,
-        authToken?: string
+        authToken?: string,
+        customTestCases?: TestCase[]
     ): Promise<ExecutionResult | null> {
         try {
-            const testCases = this.getTestCases(problemSlug);
+            const testCases = customTestCases || this.getTestCases(problemSlug);
 
             // Call backend API with timeout
             const controller = new AbortController();
@@ -133,10 +135,10 @@ export class CodeExecutor {
         };
     }
 
-    private static async executeClientSide(code: string, problemSlug: string): Promise<ExecutionResult> {
+    private static async executeClientSide(code: string, problemSlug: string, customTestCases?: TestCase[]): Promise<ExecutionResult> {
         // No artificial delay - execute immediately
         try {
-            const testCases = this.getTestCases(problemSlug);
+            const testCases = customTestCases || this.getTestCases(problemSlug);
 
             // Execute all test cases in parallel for speed
             const results = await Promise.all(

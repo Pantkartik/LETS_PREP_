@@ -1,0 +1,7 @@
+NEXT_PUBLIC_SUPABASE_URL=https://lzbbowbupqtkicpasuci.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6YmJvd2J1cHF0a2ljcGFzdWNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3NjY0MDcsImV4cCI6MjA4NTM0MjQwN30.m-GWN9QKrPQLen4i82OAAWNxEAaxEABzeYikl3uoKY8
+NEXT_PUBLIC_API_URL=https://lets-prep-backend.onrender.com/api/v1
+NEXT_PUBLIC_BACKEND_URL=https://lets-prep-backend.onrender.com
+NEXT_PUBLIC_WS_URL=https://lets-prep-backend.onrender.com
+NEXT_PUBLIC_APP_NAME=LETS_PREP
+NEXT_PUBLIC_APP_URL=https://lets-prep-frontend.vercel.app

@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { codeExecutionService } from '../services/codeExecution.service';
 import { AuthRequest } from '../middleware/auth';
@@ -73,14 +73,24 @@ export class SubmissionController {
                 .update({ status: 'RUNNING' })
                 .eq('id', submissionId);
 
-            // Execute code
-            const result = await codeExecutionService.executeCode({
+            const request = {
                 code,
                 language,
                 testCases: problem.test_cases,
                 timeLimit: problem.time_limit_ms,
                 memoryLimit: problem.memory_limit_mb,
-            });
+            };
+
+            // Check if we should use Queue (Async Worker)
+            if (process.env.ASYNC_EXECUTION === 'true') {
+                logger.info(`Offloading submission ${submissionId} to execution queue`);
+                await codeExecutionService.addExecutionJob(submissionId, request);
+                // Return here - the worker will handle execution, scoring, and DB updates
+                return;
+            }
+
+            // Synchronous Execution (Legacy/Dev)
+            const result = await codeExecutionService.executeCode(request);
 
             // Calculate score
             const score = this.calculateScore(result.passedCount, result.totalCount, result.executionTime);
@@ -164,33 +174,63 @@ export class SubmissionController {
         }
     }
 
-    // Run code with custom input (no evaluation)
+    // Run code with custom input (no evaluation) or multiple test cases
     public runCode = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
         try {
-            const { code, language, input } = req.body;
+            const { code, language, input, testCases } = req.body;
 
-            // Execute code with custom input
+            // Determine test cases to run
+            let casesToRun = [];
+            if (testCases && Array.isArray(testCases) && testCases.length > 0) {
+                casesToRun = testCases.map((tc: any) => ({
+                    input: tc.input,
+                    expectedOutput: tc.expectedOutput || '',
+                    isHidden: false
+                }));
+            } else if (input) {
+                casesToRun = [{
+                    input,
+                    expectedOutput: '',
+                    isHidden: false
+                }];
+            } else {
+                return next(new AppError(400, 'Either input or testCases must be provided'));
+            }
+
+            // Execute code
             const result = await codeExecutionService.executeCode({
                 code,
                 language,
-                testCases: [
-                    {
-                        input,
-                        expectedOutput: '', // No expected output for custom run
-                        isHidden: false,
-                    },
-                ],
-                timeLimit: 5000, // 5 seconds for custom run
-                memoryLimit: 128, // 128 MB
+                testCases: casesToRun,
+                timeLimit: 5000,
+                memoryLimit: 256,
             });
 
-            res.json({
-                output: result.testCaseResults[0]?.actualOutput || '',
-                executionTime: result.executionTime,
-                memoryUsed: result.memoryUsed,
-                status: result.status,
-                error: result.errorMessage,
-            });
+            // Format response to support both single input (old) and batch (new)
+            // If it was a batch request (testCases provided), return full result structure
+            if (testCases) {
+                res.json({
+                    results: result.testCaseResults.map(r => ({
+                        output: r.actualOutput || r.error || '',
+                        error: r.error, // Frontend executor expects error in 'actual' usually, but we can send it separately
+                        status: r.passed ? 'PASSED' : 'FAILED'
+                    })),
+                    status: result.status,
+                    runtime: result.executionTime,
+                    memory: result.memoryUsed,
+                    error: result.errorMessage,
+                    logs: ''
+                });
+            } else {
+                // Legacy response for single input
+                res.json({
+                    output: result.testCaseResults[0]?.actualOutput || '',
+                    executionTime: result.executionTime,
+                    memoryUsed: result.memoryUsed,
+                    status: result.status,
+                    error: result.errorMessage,
+                });
+            }
 
         } catch (error) {
             logger.error('Error running code', { error });

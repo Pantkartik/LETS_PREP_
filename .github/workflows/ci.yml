@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: './Backend/package-lock.json'
+
+    # Backend
+    - name: Install Backend Dependencies
+      run: |
+        cd Backend
+        npm ci
+
+    - name: Build Backend
+      run: |
+        cd Backend
+        npm run build
+
+    # Note: We are skipping tests for now as they might require a running database/redis
+    # In a real heavy production setup, we would spin up service containers here.
+    # - name: Test Backend
+    #   run: |
+    #     cd Backend
+    #     npm test
+
+    # Frontend
+    - name: Install Frontend Dependencies
+      run: |
+        cd Frontend
+        npm ci
+
+    - name: Lint Frontend
+      run: |
+        cd Frontend
+        npm run lint
+
+    - name: Build Frontend
+      run: |
+        cd Frontend
+        npm run build

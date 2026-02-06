@@ -5,8 +5,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies (including dev dependencies for building)
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -17,12 +17,20 @@ RUN npm run build
 # Production image
 FROM node:20-alpine
 
+# Install runtime dependencies for code execution fallback
+RUN apk add --no-cache python3 make g++ openjdk17-jdk && \
+  ln -sf python3 /usr/bin/python
+
 WORKDIR /app
 
-# Copy built files and dependencies
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production
+
+# Copy built files
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
 
 # Create logs directory
 RUN mkdir -p logs

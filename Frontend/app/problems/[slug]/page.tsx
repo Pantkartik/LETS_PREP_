@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ interface Problem {
     category: string;
     time_limit_ms: number;
     memory_limit_mb: number;
+    test_cases?: any[];
 }
 
 interface ComplexityAnalysis {
@@ -42,6 +43,8 @@ interface ComplexityAnalysis {
 
 export default function ProblemWorkspace() {
     const params = useParams();
+    const searchParams = useSearchParams();
+    const competitionId = searchParams?.get('competitionId');
     const slug = params?.slug as string;
     const supabase = createClient();
     const [problem, setProblem] = useState<Problem | null>(null);
@@ -250,7 +253,7 @@ export default function ProblemWorkspace() {
             // Run complexity analysis in parallel with execution
             const [complexityAnalysis, executionResult] = await Promise.all([
                 Promise.resolve(analyzeComplexity(code)),
-                CodeExecutor.executeCode(code, language, slug, authToken)
+                CodeExecutor.executeCode(code, language, slug, authToken, problem.test_cases)
             ]);
 
             setComplexity(complexityAnalysis);
@@ -319,7 +322,7 @@ export default function ProblemWorkspace() {
             // Run complexity analysis and code execution in parallel
             const [complexityAnalysis, executionResult] = await Promise.all([
                 Promise.resolve(analyzeComplexity(code)),
-                CodeExecutor.executeCode(code, language, slug, authToken)
+                CodeExecutor.executeCode(code, language, slug, authToken, problem.test_cases)
             ]);
 
             setComplexity(complexityAnalysis);
@@ -336,15 +339,68 @@ export default function ProblemWorkspace() {
             setResult(submissionResult);
 
             if (executionResult.status === 'ACCEPTED') {
-                // Update user stats in background (don't wait)
-                updateUserStats(problem.id, true).catch(err =>
-                    console.error('Failed to update stats:', err)
-                );
+                // Determine XP based on difficulty
+                const xpMap: Record<string, number> = {
+                    'EASY': 30,
+                    'MEDIUM': 50,
+                    'HARD': 100
+                };
+                const xpAmount = xpMap[problem.difficulty] || 10;
+
+                // Handle Competition Submission
+                if (competitionId) {
+                    // Fetch participant ID first
+                    const { data: participant } = await supabase
+                        .from('competition_participants')
+                        .select('id')
+                        .eq('competition_id', competitionId)
+                        .eq('user_id', user.id)
+                        .single();
+
+                    if (participant) {
+                        await supabase.from('competition_submissions').insert({
+                            competition_id: competitionId,
+                            participant_id: participant.id,
+                            problem_id: problem.id,
+                            code: code,
+                            language: language,
+                            status: executionResult.status,
+                            test_cases_passed: executionResult.passed,
+                            total_test_cases: executionResult.total,
+                            execution_time: parseInt(executionResult.runtime) || 0,
+                        });
+
+                        // Also update generic stats if needed, or leave it separate
+                    }
+                } else {
+                    // Standard Submission
+                    updateUserStats(problem.id, true).catch(err =>
+                        console.error('Failed to update stats:', err)
+                    );
+
+                    // Update XP (Check if already solved to avoid duplicate XP?)
+                    // For now, we'll award XP on every "Accepted" submission or just new ones?
+                    // Usually XP is one-time per problem.
+
+                    // Simple XP update for now (idempotency check ideal but complex here)
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('xp')
+                        .eq('id', user.id)
+                        .single();
+
+                    if (profile) {
+                        await supabase
+                            .from('profiles')
+                            .update({ xp: (profile.xp || 0) + xpAmount })
+                            .eq('id', user.id);
+                    }
+                }
 
                 // Trigger celebration immediately
                 triggerCelebration();
                 toast.success('🎉 Solution Accepted!', {
-                    description: 'Your solution has been accepted and recorded!'
+                    description: `Your solution has been accepted! +${xpAmount} XP`
                 });
             } else if (executionResult.status === 'RUNTIME_ERROR') {
                 toast.error('Runtime Error', {

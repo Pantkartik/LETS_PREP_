@@ -33,14 +33,17 @@ services:
     networks:
       - app-network
 
-  # Code Execution Worker (Optional)
+  # Code Execution Worker
   code-executor:
     build:
       context: .
-      dockerfile: Dockerfile.executor
+      dockerfile: Dockerfile.worker
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - DOCKER_ENABLED=true
     depends_on:
       - redis
     volumes:
@@ -51,6 +54,7 @@ services:
 
 volumes:
   redis-data:
+
 
 networks:
   app-network:

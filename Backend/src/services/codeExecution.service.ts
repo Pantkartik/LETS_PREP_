@@ -1,6 +1,10 @@
 import Docker from 'dockerode';
 import { logger } from '../config/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { spawn } from 'child_process';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { QueueService } from './queue.service';
 
 export interface CodeExecutionRequest {
     code: string;
@@ -35,6 +39,50 @@ export interface CodeExecutionResult {
     errorLine?: number;
 }
 
+// Language configuration types for local execution
+type BaseLanguageConfig = {
+    extension: string;
+    command: string;
+};
+
+type InterpretedLanguageConfig = BaseLanguageConfig & {
+    args: (file: string) => string[];
+};
+
+type CompiledLanguageConfig = BaseLanguageConfig & {
+    compileArgs: (file: string, output: string) => string[];
+    runCommand: (output: string) => string;
+    runArgs?: (className: string) => string[];
+};
+
+type LanguageConfig = InterpretedLanguageConfig | CompiledLanguageConfig;
+
+const LOCAL_LANGUAGE_CONFIG: Record<string, LanguageConfig> = {
+    python: {
+        extension: '.py',
+        command: 'python',
+        args: (file: string) => [file]
+    },
+    javascript: {
+        extension: '.js',
+        command: 'node',
+        args: (file: string) => [file]
+    },
+    cpp: {
+        extension: '.cpp',
+        command: 'g++',
+        compileArgs: (file: string, output: string) => ['-std=c++17', '-O2', file, '-o', output],
+        runCommand: (output: string) => output
+    },
+    java: {
+        extension: '.java',
+        command: 'javac',
+        compileArgs: (file: string) => [file],
+        runCommand: (_className: string) => 'java',
+        runArgs: (className: string) => [className]
+    }
+};
+
 export class CodeExecutionService {
     private docker: Docker;
     private readonly defaultTimeout = parseInt(process.env.CODE_EXECUTION_TIMEOUT || '10000');
@@ -45,6 +93,32 @@ export class CodeExecutionService {
     }
 
     public async executeCode(request: CodeExecutionRequest): Promise<CodeExecutionResult> {
+        // If Async Execution is enabled, we should not maintain this connection.
+        // However, this method signature expects a Promise<Result>.
+        // For Async mode, the controller should handle the 'pending' response.
+
+        // Try Docker if enabled, fallback to local if it fails or is disabled
+        if (process.env.DOCKER_ENABLED === 'true') {
+            try {
+                return await this.executeWithDocker(request);
+            } catch (error: any) {
+                logger.warn('Docker execution failed, falling back to local execution', { error: error.message });
+                return this.executeLocal(request);
+            }
+        }
+        return this.executeLocal(request);
+    }
+
+    public async addExecutionJob(submissionId: string, request: CodeExecutionRequest): Promise<void> {
+        const queueService = QueueService.getInstance();
+        await queueService.addExecutionJob({
+            submissionId,
+            ...request
+        });
+    }
+
+
+    private async executeWithDocker(request: CodeExecutionRequest): Promise<CodeExecutionResult> {
         const {
             code,
             language,
@@ -68,7 +142,7 @@ export class CodeExecutionService {
                 const testCase = testCases[i];
 
                 try {
-                    const result = await this.executeTestCase(
+                    const result = await this.executeTestCaseDocker(
                         code,
                         language,
                         testCase.input,
@@ -85,8 +159,6 @@ export class CodeExecutionService {
                     totalExecutionTime += result.executionTime;
                     maxMemoryUsed = Math.max(maxMemoryUsed, result.memoryUsed);
 
-                    // Stop execution if test case failed (optional optimization)
-                    // if (!result.passed) break;
                 } catch (error: any) {
                     logger.error('Test case execution error', { error, testCaseId: i + 1 });
                     testCaseResults.push({
@@ -100,40 +172,221 @@ export class CodeExecutionService {
                 }
             }
 
-            // Determine overall status
-            const passedCount = testCaseResults.filter((r) => r.passed).length;
-            const totalCount = testCaseResults.length;
-
-            let status: CodeExecutionResult['status'] = 'ACCEPTED';
-            if (passedCount < totalCount) {
-                status = 'WRONG_ANSWER';
-            }
-
-            // Check for time limit exceeded
-            if (testCaseResults.some((r) => r.error?.includes('timeout'))) {
-                status = 'TIME_LIMIT_EXCEEDED';
-            }
-
-            // Check for memory limit exceeded
-            if (testCaseResults.some((r) => r.error?.includes('memory'))) {
-                status = 'MEMORY_LIMIT_EXCEEDED';
-            }
-
-            return {
-                status,
-                testCaseResults,
-                passedCount,
-                totalCount,
-                executionTime: totalExecutionTime,
-                memoryUsed: maxMemoryUsed,
-            };
+            return this.aggregateResults(testCaseResults);
         } catch (error: any) {
             logger.error('Code execution error', { error });
-            return this.createErrorResult('SYSTEM_ERROR', error.message, testCases.length);
+            throw error; // Rethrow to trigger fallback
         }
     }
 
-    private async executeTestCase(
+    private async executeLocal(request: CodeExecutionRequest): Promise<CodeExecutionResult> {
+        const { code, language, testCases, timeLimit = 2000 } = request;
+        const config = LOCAL_LANGUAGE_CONFIG[language as keyof typeof LOCAL_LANGUAGE_CONFIG];
+
+        if (!config) {
+            return this.createErrorResult('SYSTEM_ERROR', `Unsupported language: ${language}`, testCases.length);
+        }
+
+        const workDir = path.join(process.cwd(), 'temp', uuidv4());
+        await fs.mkdir(workDir, { recursive: true });
+
+        try {
+            let filename = `Solution${config.extension}`;
+            if (language === 'java') {
+                const classMatch = code.match(/public\s+class\s+(\w+)/);
+                if (classMatch) {
+                    filename = `${classMatch[1]}${config.extension}`;
+                }
+            }
+
+            const filePath = path.join(workDir, filename);
+            await fs.writeFile(filePath, code);
+
+            // Compilation step
+            if (language === 'cpp' || language === 'java') {
+                const compiledConfig = config as CompiledLanguageConfig;
+                const outputFile = language === 'cpp' ? path.join(workDir, 'program.exe') : '';
+                const compileArgs = language === 'cpp'
+                    ? compiledConfig.compileArgs(filePath, outputFile)
+                    : compiledConfig.compileArgs(filePath, '');
+
+                const compileResult = await this.runProcess(
+                    config.command,
+                    compileArgs,
+                    workDir,
+                    '',
+                    30000
+                );
+
+                if (compileResult.exitCode !== 0) {
+                    // Enhanced error message
+                    const errorLines = compileResult.stderr.split('\n');
+                    const relevantErrors = errorLines
+                        .filter(line => line.includes('error') || line.includes('Error'))
+                        .slice(0, 5)
+                        .join('\n');
+
+                    return {
+                        status: 'COMPILATION_ERROR',
+                        testCaseResults: [],
+                        passedCount: 0,
+                        totalCount: testCases.length,
+                        executionTime: 0,
+                        memoryUsed: 0,
+                        errorMessage: relevantErrors || compileResult.stderr
+                    };
+                }
+            }
+
+            // Execute test cases
+            const testCaseResults: TestCaseResult[] = await Promise.all(
+                testCases.map(async (testCase, index) => {
+                    let command: string;
+                    let args: string[];
+
+                    if (language === 'cpp') {
+                        command = path.join(workDir, 'program.exe');
+                        args = [];
+                    } else if (language === 'java') {
+                        command = 'java';
+                        args = [filename.replace('.java', '')];
+                    } else {
+                        const interpretedConfig = config as InterpretedLanguageConfig;
+                        command = interpretedConfig.command;
+                        args = interpretedConfig.args(filePath);
+                    }
+
+                    const startTime = Date.now();
+                    const result = await this.runProcess(
+                        command,
+                        args,
+                        workDir,
+                        testCase.input,
+                        timeLimit
+                    );
+                    const executionTime = Date.now() - startTime;
+
+                    if (result.timeout) {
+                        return {
+                            testCaseId: index + 1,
+                            passed: false,
+                            expectedOutput: testCase.expectedOutput,
+                            executionTime,
+                            memoryUsed: 0,
+                            error: 'Time Limit Exceeded'
+                        };
+                    }
+
+                    if (result.exitCode !== 0) {
+                        return {
+                            testCaseId: index + 1,
+                            passed: false,
+                            expectedOutput: testCase.expectedOutput,
+                            executionTime,
+                            memoryUsed: 0,
+                            error: result.stderr
+                        };
+                    }
+
+                    const actualOutput = result.stdout.trim();
+                    const passed = this.compareOutputs(actualOutput, testCase.expectedOutput.trim());
+
+                    return {
+                        testCaseId: index + 1,
+                        passed,
+                        actualOutput,
+                        expectedOutput: testCase.expectedOutput,
+                        executionTime,
+                        memoryUsed: 0 // Placeholder
+                    };
+                })
+            );
+
+            return this.aggregateResults(testCaseResults);
+
+        } catch (error: any) {
+            logger.error('Local execution error', { error });
+            return this.createErrorResult('SYSTEM_ERROR', error.message, testCases.length);
+        } finally {
+            try {
+                await fs.rm(workDir, { recursive: true, force: true });
+            } catch (e) { console.error('Cleanup error:', e); }
+        }
+    }
+
+    private runProcess(
+        command: string,
+        args: string[],
+        cwd: string,
+        stdin: string,
+        timeout: number
+    ): Promise<{ stdout: string; stderr: string; exitCode: number; timeout: boolean }> {
+        return new Promise((resolve) => {
+            let timedOut = false;
+            let stdout = '';
+            let stderr = '';
+
+            const proc = spawn(command, args, { cwd });
+
+            const timeoutId = setTimeout(() => {
+                timedOut = true;
+                proc.kill();
+            }, timeout);
+
+            if (stdin) {
+                proc.stdin.write(stdin);
+                proc.stdin.end();
+            }
+
+            proc.stdout.on('data', (data) => { stdout += data.toString(); });
+            proc.stderr.on('data', (data) => { stderr += data.toString(); });
+
+            proc.on('close', (code) => {
+                clearTimeout(timeoutId);
+                resolve({
+                    stdout: stdout.trim(),
+                    stderr: stderr.trim(),
+                    exitCode: code || 0,
+                    timeout: timedOut
+                });
+            });
+
+            proc.on('error', (error) => {
+                clearTimeout(timeoutId);
+                resolve({
+                    stdout: '',
+                    stderr: error.message,
+                    exitCode: 1,
+                    timeout: timedOut
+                });
+            });
+        });
+    }
+
+    private aggregateResults(testCaseResults: TestCaseResult[]): CodeExecutionResult {
+        const passedCount = testCaseResults.filter((r) => r.passed).length;
+        const totalCount = testCaseResults.length;
+
+        let status: CodeExecutionResult['status'] = 'ACCEPTED';
+        if (passedCount < totalCount) status = 'WRONG_ANSWER';
+
+        if (testCaseResults.some(r => r.error === 'Time Limit Exceeded')) status = 'TIME_LIMIT_EXCEEDED';
+        else if (testCaseResults.some(r => r.error && r.error.includes('error'))) status = 'RUNTIME_ERROR';
+
+        const totalExecutionTime = testCaseResults.reduce((acc, r) => acc + r.executionTime, 0);
+        const maxMemoryUsed = testCaseResults.reduce((acc, r) => Math.max(acc, r.memoryUsed), 0);
+
+        return {
+            status,
+            testCaseResults,
+            passedCount,
+            totalCount,
+            executionTime: totalExecutionTime,
+            memoryUsed: maxMemoryUsed,
+        };
+    }
+
+    private async executeTestCaseDocker(
         code: string,
         language: string,
         input: string,
@@ -305,10 +558,7 @@ export class CodeExecutionService {
         };
     }
 
-    // Alternative: Execute using AWS Lambda (for production)
     public async executeWithLambda(request: CodeExecutionRequest): Promise<CodeExecutionResult> {
-        // TODO: Implement AWS Lambda execution
-        // This would be more scalable for production
         throw new Error('Lambda execution not implemented yet');
     }
 }
