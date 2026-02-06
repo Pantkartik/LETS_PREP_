@@ -8,6 +8,8 @@ services:
     branch: main
     context: ./Backend
     dockerfilePath: ./Backend/Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
@@ -15,6 +17,8 @@ services:
         value: 3001
       - key: DOCKER_ENABLED
         value: false
+      - key: REDIS_MOCK
+        value: true
       - key: REDIS_HOST
         value: lets-prep-redis
       - key: REDIS_PORT
