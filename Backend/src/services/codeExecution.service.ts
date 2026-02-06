@@ -525,16 +525,33 @@ export class CodeExecutionService {
     }
 
     private compareOutputs(actual: string, expected: string): boolean {
-        // Normalize outputs
-        const normalizeOutput = (output: string) => {
+        // Production-grade output normalization
+        // Handles: whitespace, line endings, empty lines, trailing spaces
+        const normalize = (output: string): string => {
             return output
-                .trim()
-                .replace(/\r\n/g, '\n')
-                .replace(/\s+$/gm, '')
-                .toLowerCase();
+                .trim()                           // Remove leading/trailing whitespace
+                .replace(/\r\n/g, '\n')          // Windows → Unix line endings
+                .replace(/\r/g, '\n')            // Old Mac → Unix
+                .split('\n')                      // Split into lines
+                .map(line => line.trim())         // Trim each line
+                .filter(line => line.length > 0)  // Remove empty lines
+                .join('\n');                      // Rejoin
         };
 
-        return normalizeOutput(actual) === normalizeOutput(expected);
+        const normalizedActual = normalize(actual);
+        const normalizedExpected = normalize(expected);
+
+        // For case-insensitive comparison (optional, depends on problem)
+        // return normalizedActual.toLowerCase() === normalizedExpected.toLowerCase();
+
+        // TODO: For advanced problems, integrate full JudgeEngine:
+        // - Floating point comparison (epsilon tolerance)
+        // - Multiple valid outputs
+        // - Custom checkers
+        // - Unordered arrays
+        // See: Backend/src/services/judge/judgeEngine.ts
+
+        return normalizedActual === normalizedExpected;
     }
 
     private isSupportedLanguage(language: string): boolean {
