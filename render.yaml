@@ -1,0 +1,48 @@
+services:
+  # Backend Web Service
+  - type: web
+    name: lets-prep-backend
+    runtime: docker
+    region: oregon
+    plan: free
+    context: ./Backend
+    dockerfilePath: ./Backend/Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: DOCKER_ENABLED
+        value: false
+      # Link to the Internal Redis Service
+      - key: REDIS_HOST
+        fromService:
+          type: redis
+          name: lets-prep-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: redis
+          name: lets-prep-redis
+          property: port
+      # Supabase & Secrets (Manual Input)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: JWT_SECRET
+        generate: true
+      - key: CORS_ORIGIN
+        sync: false 
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+  # Redis Service (Correctly defined under services)
+  - type: redis
+    name: lets-prep-redis
+    region: oregon
+    plan: free
+    ipAllowList: [] # Private to internal network only
+    maxmemoryPolicy: allkeys-lru # Recommended for cache
