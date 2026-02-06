@@ -1,5 +1,5 @@
 import React from 'react'
-import DashboardSidebar from '@/components/dashboard-sidebar'
+import { DashboardSidebar } from '@/components/dashboard-sidebar'
 import CompetitionsManager from '@/components/teacher/competitions-manager'
 import { getTeacherGameRooms } from '@/lib/actions/teacher-competitions'
 
