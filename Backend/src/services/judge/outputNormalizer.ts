@@ -16,7 +16,9 @@ export interface NormalizationOptions {
     caseSensitive?: boolean;
     normalizeWhitespace?: boolean;
     preserveLineCount?: boolean;
+    stripArrayFormat?: boolean;
 }
+
 
 export class OutputNormalizer {
     /**
@@ -28,7 +30,8 @@ export class OutputNormalizer {
             removeEmptyLines = true,
             caseSensitive = true,
             normalizeWhitespace = true,
-            preserveLineCount = false
+            preserveLineCount = false,
+            stripArrayFormat = false
         } = options;
 
         let result = output;
@@ -57,6 +60,11 @@ export class OutputNormalizer {
         // 6. Normalize whitespace within lines (multiple spaces -> single space)
         if (normalizeWhitespace) {
             lines = lines.map(line => line.replace(/\s+/g, ' '));
+        }
+
+        // 6.5. Strip array formatting (brackets and commas)
+        if (stripArrayFormat) {
+            lines = lines.map(line => line.replace(/[\[\],]/g, ' ').replace(/\s+/g, ' ').trim());
         }
 
         // 7. Handle case sensitivity

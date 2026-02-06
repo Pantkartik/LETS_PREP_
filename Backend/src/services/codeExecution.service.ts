@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { QueueService } from './queue.service';
+import { OutputNormalizer } from './judge/outputNormalizer';
 
 export interface CodeExecutionRequest {
     code: string;
@@ -525,31 +526,17 @@ export class CodeExecutionService {
     }
 
     private compareOutputs(actual: string, expected: string): boolean {
-        // Production-grade output normalization
-        // Handles: whitespace, line endings, empty lines, trailing spaces
-        const normalize = (output: string): string => {
-            return output
-                .trim()                           // Remove leading/trailing whitespace
-                .replace(/\r\n/g, '\n')          // Windows → Unix line endings
-                .replace(/\r/g, '\n')            // Old Mac → Unix
-                .split('\n')                      // Split into lines
-                .map(line => line.trim())         // Trim each line
-                .filter(line => line.length > 0)  // Remove empty lines
-                .join('\n');                      // Rejoin
-        };
+        // Use production-grade normalizer with lenient array formatting
+        // This accepts both "[1, 2, 3]" and "1 2 3" as valid matches
+        const normalize = (output: string) => OutputNormalizer.normalize(output, {
+            stripArrayFormat: true,
+            trimLines: true,
+            removeEmptyLines: true,
+            normalizeWhitespace: true
+        });
 
         const normalizedActual = normalize(actual);
         const normalizedExpected = normalize(expected);
-
-        // For case-insensitive comparison (optional, depends on problem)
-        // return normalizedActual.toLowerCase() === normalizedExpected.toLowerCase();
-
-        // TODO: For advanced problems, integrate full JudgeEngine:
-        // - Floating point comparison (epsilon tolerance)
-        // - Multiple valid outputs
-        // - Custom checkers
-        // - Unordered arrays
-        // See: Backend/src/services/judge/judgeEngine.ts
 
         return normalizedActual === normalizedExpected;
     }
