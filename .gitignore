@@ -73,3 +73,5 @@ docker-compose.override.yml
 .eslintcache
 .stylelintcache
 *.tsbuildinfo
+*_VALUES.txt
+*VALUES.txt

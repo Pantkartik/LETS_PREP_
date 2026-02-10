@@ -153,11 +153,14 @@ Should output: ✅ All tests passed
 
 ## 📚 Documentation
 
-- **[Security Policy](SECURITY.md)** - Security measures and reporting
-- **[GitHub Push Guide](GITHUB_PUSH_GUIDE.md)** - Secure deployment checklist
-- **[Pre-Push Checklist](PRE_PUSH_CHECKLIST.md)** - Before committing
-- **[Test Case Management](Backend/TEST_CASE_MANAGEMENT.md)** - Adding test cases
-- **[Security Audit Report](SECURITY_AUDIT_REPORT.md)** - Latest audit results
+- **[📚 Setup Guide](docs/setup/QUICK_SETUP.md)** - Installation and configuration
+- **[🚀 Deployment Guide](docs/deployment/DEPLOYMENT.md)** - Production deployment instructions
+- **[🔒 Security Policy](SECURITY.md)** - Security measures and reporting
+- **[🛡️ Security Audit](docs/security/SECURITY_AUDIT_REPORT.md)** - Latest vulnerability assessment
+- **[✅ push Checklist](docs/deployment/PRE_PUSH_CHECKLIST.md)** - Pre-commit verification
+- **[🧪 Test Cases](docs/testing/TEST_CASE_MANAGEMENT.md)** - Adding and managing test cases
+- **[🏗️ Architecture](docs/architecture/ARCHITECTURE.md)** - System design and data flow
+- **[✨ Features](docs/features/FEATURES_IMPLEMENTED.md)** - Detailed feature documentation
 
 ## 🔒 Security
 
