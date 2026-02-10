@@ -1,0 +1,62 @@
+# CodeRabbit Configuration
+# Documentation: https://docs.coderabbit.ai/
+
+version: "0.1"
+
+# Review settings
+reviews:
+  # Enable high-level summary
+  high_level_summary: true
+  
+  # Enable poem (fun but optional)
+  poem: true
+  
+  # Configuration for review comments
+  review_status: true
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+    
+  # Focus areas for AI review
+  focus:
+    - security
+    - performance
+    - best_practices
+    - docker
+    - sql
+    
+  # File patterns to exclude from review
+  path_filters:
+    - "!dist/**"
+    - "!build/**"
+    - "!node_modules/**"
+    - "!coverage/**"
+    - "!**/*.lock"
+    - "!**/*.log"
+    - "!**/*.svg"
+    - "!public/**"
+
+# Chat settings
+chat:
+  auto_reply: true
+
+# Knowledge base (optional)
+# You can add specific instructions here
+instructions: |
+  You are a senior software engineer reviewing a secure online judge platform.
+  
+  Key Security Requirements:
+   1. Docker Isolation: Check for insecure container configurations.
+   2. Input Validation: Ensure all user inputs are validated with Zod.
+   3. SQL Injection: Verify Supabase queries use parameterized inputs.
+   4. Secrets: Flag any hardcoded API keys or secrets immediately.
+   5. C++ Safety: Ensure pointer arithmetic and memory usage are safe.
+   
+  Performance Requirements:
+   1. Next.js: Check for optimal use of Server Components vs Client Components.
+   2. Database: Verify indexes on frequently queried columns.
+   
+  Style:
+   1. Follow Clean Code principles.
+   2. Use TypeScript strict typing.
