@@ -298,9 +298,10 @@ MIT License - see [LICENSE](LICENSE) file
 
 ## 👥 Team
 
-- **Developer**: Your Name
-- **Security**: security@lets-prep.com
-- **Support**: support@lets-prep.com
+- **Developer**: Kartik Pant
+- **Security**: kartikpant.kp69@gmail.com
+- **Support**:  kartikpant.kp69@gmail.com
+
 
 ## 🙏 Acknowledgments
 
