@@ -1,11 +1,12 @@
 import Docker from 'dockerode';
 import { logger } from '../config/logger';
 import { v4 as uuidv4 } from 'uuid';
-import { spawn } from 'child_process';
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import { QueueService } from './queue.service';
 import { OutputNormalizer } from './judge/outputNormalizer';
+import { IsolationManager } from './execution/IsolationManager';
+import { TemplateEngine } from './execution/TemplateEngine';
+import { Validator } from './execution/Validator';
 
 export interface CodeExecutionRequest {
     code: string;
@@ -17,6 +18,10 @@ export interface CodeExecutionRequest {
     }>;
     timeLimit?: number; // in milliseconds
     memoryLimit?: number; // in MB
+    validationConfig?: {
+        mode: 'exact' | 'float' | 'custom';
+        epsilon?: number;
+    };
 }
 
 export interface TestCaseResult {
@@ -40,328 +45,171 @@ export interface CodeExecutionResult {
     errorLine?: number;
 }
 
-// Language configuration types for local execution
-type BaseLanguageConfig = {
-    extension: string;
-    command: string;
-};
-
-type InterpretedLanguageConfig = BaseLanguageConfig & {
-    args: (file: string) => string[];
-};
-
-type CompiledLanguageConfig = BaseLanguageConfig & {
-    compileArgs: (file: string, output: string) => string[];
-    runCommand: (output: string) => string;
-    runArgs?: (className: string) => string[];
-};
-
-type LanguageConfig = InterpretedLanguageConfig | CompiledLanguageConfig;
-
-const LOCAL_LANGUAGE_CONFIG: Record<string, LanguageConfig> = {
-    python: {
-        extension: '.py',
-        command: 'python',
-        args: (file: string) => [file]
-    },
-    javascript: {
-        extension: '.js',
-        command: 'node',
-        args: (file: string) => [file]
-    },
-    cpp: {
-        extension: '.cpp',
-        command: 'g++',
-        compileArgs: (file: string, output: string) => ['-std=c++17', '-O2', file, '-o', output],
-        runCommand: (output: string) => output
-    },
-    java: {
-        extension: '.java',
-        command: 'javac',
-        compileArgs: (file: string) => [file],
-        runCommand: (_className: string) => 'java',
-        runArgs: (className: string) => [className]
-    }
-};
-
 export class CodeExecutionService {
-    private docker: Docker;
-    private readonly defaultTimeout = parseInt(process.env.CODE_EXECUTION_TIMEOUT || '10000');
-    private readonly defaultMemoryLimit = parseInt(process.env.MAX_MEMORY_MB || '256');
+    private isolationManager: IsolationManager;
+    private readonly defaultTimeout = 2000; // 2 seconds
+    private readonly defaultMemoryLimit = 256; // 256 MB
 
     constructor() {
-        this.docker = new Docker();
+        this.isolationManager = new IsolationManager();
     }
 
     public async executeCode(request: CodeExecutionRequest): Promise<CodeExecutionResult> {
-        // If Async Execution is enabled, we should not maintain this connection.
-        // However, this method signature expects a Promise<Result>.
-        // For Async mode, the controller should handle the 'pending' response.
-
-        // Try Docker if enabled, fallback to local if it fails or is disabled
-        if (process.env.DOCKER_ENABLED === 'true') {
-            try {
-                return await this.executeWithDocker(request);
-            } catch (error: any) {
-                logger.warn('Docker execution failed, falling back to local execution', { error: error.message });
-                return this.executeLocal(request);
+        // Fallback to local if Docker not enabled handled by environment check usually, 
+        // but here we enforce IsolationManager which uses Docker.
+        // If Docker is down, IsolationManager will throw.
+        try {
+            const isHealthy = await this.isolationManager.checkHealth();
+            if (!isHealthy) {
+                // Return descriptive error instead of crash
+                return {
+                    status: 'SYSTEM_ERROR',
+                    testCaseResults: [],
+                    passedCount: 0,
+                    totalCount: request.testCases.length,
+                    executionTime: 0,
+                    memoryUsed: 0,
+                    errorMessage: 'Docker is not running or not installed. Execution engine requires Docker.'
+                };
             }
+            return await this.executeWithIsolation(request);
+        } catch (error: any) {
+            logger.error('Execution failed', error);
+            return {
+                status: 'SYSTEM_ERROR',
+                testCaseResults: [],
+                passedCount: 0,
+                totalCount: request.testCases.length,
+                executionTime: 0,
+                memoryUsed: 0,
+                errorMessage: error.message
+            };
         }
-        return this.executeLocal(request);
     }
 
-    public async addExecutionJob(submissionId: string, request: CodeExecutionRequest): Promise<void> {
-        const queueService = QueueService.getInstance();
-        await queueService.addExecutionJob({
-            submissionId,
-            ...request
-        });
-    }
-
-
-    private async executeWithDocker(request: CodeExecutionRequest): Promise<CodeExecutionResult> {
+    private async executeWithIsolation(request: CodeExecutionRequest): Promise<CodeExecutionResult> {
         const {
             code,
             language,
             testCases,
             timeLimit = this.defaultTimeout,
             memoryLimit = this.defaultMemoryLimit,
+            validationConfig = { mode: 'exact' }
         } = request;
 
-        try {
-            // Validate language
-            if (!this.isSupportedLanguage(language)) {
-                return this.createErrorResult('SYSTEM_ERROR', 'Unsupported language', testCases.length);
-            }
+        const testCaseResults: TestCaseResult[] = [];
+        let totalExecutionTime = 0;
+        let maxMemoryUsed = 0;
 
-            // Execute code for each test case
-            const testCaseResults: TestCaseResult[] = [];
-            let totalExecutionTime = 0;
-            let maxMemoryUsed = 0;
+        // Smart Template Selection
+        // If code has entry point, use Raw Mode. Else use Template.
+        let fullCode = code;
+        const hasMain = this.checkEntrypoint(language, code);
 
-            for (let i = 0; i < testCases.length; i++) {
-                const testCase = testCases[i];
+        if (!hasMain) {
+            // Inject into template
+            // Note: Since we don't have parsers generated yet, we assume the user 
+            // wrote a class that matches the template's expectations (or we fail).
+            // For now, we allow the template engine to just wrap.
+            fullCode = TemplateEngine.injectCode(language, code);
+        }
 
-                try {
-                    const result = await this.executeTestCaseDocker(
-                        code,
-                        language,
-                        testCase.input,
-                        testCase.expectedOutput,
-                        timeLimit,
-                        memoryLimit
-                    );
+        // Execute for each test case
+        // Optimization TODO: Bundle test cases or use persistent container
+        for (let i = 0; i < testCases.length; i++) {
+            const testCase = testCases[i];
 
-                    testCaseResults.push({
-                        testCaseId: i + 1,
-                        ...result,
-                    });
+            try {
+                // Execute Securely
+                const result = await this.isolationManager.execute({
+                    language,
+                    code: fullCode,
+                    input: testCase.input,
+                    timeLimit: timeLimit / 1000, // Convert ms to seconds
+                    memoryLimit: memoryLimit
+                });
 
-                    totalExecutionTime += result.executionTime;
-                    maxMemoryUsed = Math.max(maxMemoryUsed, result.memoryUsed);
+                // Handle Execution Result
+                if (result.exitCode !== 0) {
+                    // Check for TLE/MLE/RTE
+                    let status = 'RUNTIME_ERROR';
+                    let errorMsg = result.stderr;
 
-                } catch (error: any) {
-                    logger.error('Test case execution error', { error, testCaseId: i + 1 });
+                    if (result.stdout.includes('Time Limit Exceeded') || result.stderr.includes('Time Limit Exceeded') || result.timeout) {
+                        status = 'TIME_LIMIT_EXCEEDED';
+                        errorMsg = 'Time Limit Exceeded';
+                    } else if (result.stderr.includes('Memory Limit Exceeded') || result.error === 'Memory Limit Exceeded') {
+                        status = 'MEMORY_LIMIT_EXCEEDED';
+                        errorMsg = 'Memory Limit Exceeded';
+                    } else if (result.stderr.includes('Compilation') || result.stderr.includes('error:')) {
+                        // Rough heuristic for compile error vs runtime
+                        // Ideally IsolationManager distinguishes phase
+                        // If exit code is non-zero and no execution time (compile fails fast or before run), it's CE.
+                        // But we chain compile && run.
+                        // If compile fails, `&&` prevents run.
+                        // We can check if `compiled_binary` exists or checking stderr keywords.
+                        if (result.stderr.includes('error:') || result.stderr.includes('Error:')) {
+                            status = 'COMPILATION_ERROR';
+                        }
+                    }
+
+                    // Fail this test case
                     testCaseResults.push({
                         testCaseId: i + 1,
                         passed: false,
                         expectedOutput: testCase.expectedOutput,
-                        executionTime: 0,
-                        memoryUsed: 0,
-                        error: error.message,
+                        executionTime: result.time,
+                        memoryUsed: result.memory,
+                        error: errorMsg
                     });
+
+                    // Specific verdict stops? LeetCode runs all usually, but for contest mode we might stop.
+                    // We'll continue to collect stats.
+                    continue;
                 }
-            }
 
-            return this.aggregateResults(testCaseResults);
-        } catch (error: any) {
-            logger.error('Code execution error', { error });
-            throw error; // Rethrow to trigger fallback
-        }
-    }
-
-    private async executeLocal(request: CodeExecutionRequest): Promise<CodeExecutionResult> {
-        const { code, language, testCases, timeLimit = 2000 } = request;
-        const config = LOCAL_LANGUAGE_CONFIG[language as keyof typeof LOCAL_LANGUAGE_CONFIG];
-
-        if (!config) {
-            return this.createErrorResult('SYSTEM_ERROR', `Unsupported language: ${language}`, testCases.length);
-        }
-
-        const workDir = path.join(process.cwd(), 'temp', uuidv4());
-        await fs.mkdir(workDir, { recursive: true });
-
-        try {
-            let filename = `Solution${config.extension}`;
-            if (language === 'java') {
-                const classMatch = code.match(/public\s+class\s+(\w+)/);
-                if (classMatch) {
-                    filename = `${classMatch[1]}${config.extension}`;
-                }
-            }
-
-            const filePath = path.join(workDir, filename);
-            await fs.writeFile(filePath, code);
-
-            // Compilation step
-            if (language === 'cpp' || language === 'java') {
-                const compiledConfig = config as CompiledLanguageConfig;
-                const outputFile = language === 'cpp' ? path.join(workDir, 'program.exe') : '';
-                const compileArgs = language === 'cpp'
-                    ? compiledConfig.compileArgs(filePath, outputFile)
-                    : compiledConfig.compileArgs(filePath, '');
-
-                const compileResult = await this.runProcess(
-                    config.command,
-                    compileArgs,
-                    workDir,
-                    '',
-                    30000
+                // Validation
+                const passed = Validator.validate(
+                    result.stdout,
+                    testCase.expectedOutput,
+                    validationConfig.mode as any,
+                    { epsilon: validationConfig.epsilon }
                 );
 
-                if (compileResult.exitCode !== 0) {
-                    // Enhanced error message
-                    const errorLines = compileResult.stderr.split('\n');
-                    const relevantErrors = errorLines
-                        .filter(line => line.includes('error') || line.includes('Error'))
-                        .slice(0, 5)
-                        .join('\n');
+                testCaseResults.push({
+                    testCaseId: i + 1,
+                    passed,
+                    actualOutput: result.stdout, // In production, maybe truncate
+                    expectedOutput: testCase.expectedOutput,
+                    executionTime: result.time,
+                    memoryUsed: result.memory
+                });
 
-                    return {
-                        status: 'COMPILATION_ERROR',
-                        testCaseResults: [],
-                        passedCount: 0,
-                        totalCount: testCases.length,
-                        executionTime: 0,
-                        memoryUsed: 0,
-                        errorMessage: relevantErrors || compileResult.stderr
-                    };
-                }
+                totalExecutionTime += result.time;
+                maxMemoryUsed = Math.max(maxMemoryUsed, result.memory);
+
+            } catch (err: any) {
+                logger.error(`Test case ${i + 1} failed internally`, err);
+                testCaseResults.push({
+                    testCaseId: i + 1,
+                    passed: false,
+                    expectedOutput: testCase.expectedOutput,
+                    executionTime: 0,
+                    memoryUsed: 0,
+                    error: 'Internal System Error'
+                });
             }
-
-            // Execute test cases
-            const testCaseResults: TestCaseResult[] = await Promise.all(
-                testCases.map(async (testCase, index) => {
-                    let command: string;
-                    let args: string[];
-
-                    if (language === 'cpp') {
-                        command = path.join(workDir, 'program.exe');
-                        args = [];
-                    } else if (language === 'java') {
-                        command = 'java';
-                        args = [filename.replace('.java', '')];
-                    } else {
-                        const interpretedConfig = config as InterpretedLanguageConfig;
-                        command = interpretedConfig.command;
-                        args = interpretedConfig.args(filePath);
-                    }
-
-                    const startTime = Date.now();
-                    const result = await this.runProcess(
-                        command,
-                        args,
-                        workDir,
-                        testCase.input,
-                        timeLimit
-                    );
-                    const executionTime = Date.now() - startTime;
-
-                    if (result.timeout) {
-                        return {
-                            testCaseId: index + 1,
-                            passed: false,
-                            expectedOutput: testCase.expectedOutput,
-                            executionTime,
-                            memoryUsed: 0,
-                            error: 'Time Limit Exceeded'
-                        };
-                    }
-
-                    if (result.exitCode !== 0) {
-                        return {
-                            testCaseId: index + 1,
-                            passed: false,
-                            expectedOutput: testCase.expectedOutput,
-                            executionTime,
-                            memoryUsed: 0,
-                            error: result.stderr
-                        };
-                    }
-
-                    const actualOutput = result.stdout.trim();
-                    const passed = this.compareOutputs(actualOutput, testCase.expectedOutput.trim());
-
-                    return {
-                        testCaseId: index + 1,
-                        passed,
-                        actualOutput,
-                        expectedOutput: testCase.expectedOutput,
-                        executionTime,
-                        memoryUsed: 0 // Placeholder
-                    };
-                })
-            );
-
-            return this.aggregateResults(testCaseResults);
-
-        } catch (error: any) {
-            logger.error('Local execution error', { error });
-            return this.createErrorResult('SYSTEM_ERROR', error.message, testCases.length);
-        } finally {
-            try {
-                await fs.rm(workDir, { recursive: true, force: true });
-            } catch (e) { console.error('Cleanup error:', e); }
         }
+
+        return this.aggregateResults(testCaseResults);
     }
 
-    private runProcess(
-        command: string,
-        args: string[],
-        cwd: string,
-        stdin: string,
-        timeout: number
-    ): Promise<{ stdout: string; stderr: string; exitCode: number; timeout: boolean }> {
-        return new Promise((resolve) => {
-            let timedOut = false;
-            let stdout = '';
-            let stderr = '';
-
-            const proc = spawn(command, args, { cwd });
-
-            const timeoutId = setTimeout(() => {
-                timedOut = true;
-                proc.kill();
-            }, timeout);
-
-            if (stdin) {
-                proc.stdin.write(stdin);
-                proc.stdin.end();
-            }
-
-            proc.stdout.on('data', (data) => { stdout += data.toString(); });
-            proc.stderr.on('data', (data) => { stderr += data.toString(); });
-
-            proc.on('close', (code) => {
-                clearTimeout(timeoutId);
-                resolve({
-                    stdout: stdout.trim(),
-                    stderr: stderr.trim(),
-                    exitCode: code || 0,
-                    timeout: timedOut
-                });
-            });
-
-            proc.on('error', (error) => {
-                clearTimeout(timeoutId);
-                resolve({
-                    stdout: '',
-                    stderr: error.message,
-                    exitCode: 1,
-                    timeout: timedOut
-                });
-            });
-        });
+    private checkEntrypoint(language: string, code: string): boolean {
+        if (language === 'cpp') return code.includes('int main');
+        if (language === 'java') return code.includes('public static void main');
+        if (language === 'python') return code.includes('if __name__');
+        if (language === 'javascript') return code.includes('main()') && !code.includes('class Solution'); // Weak check
+        return false;
     }
 
     private aggregateResults(testCaseResults: TestCaseResult[]): CodeExecutionResult {
@@ -369,10 +217,19 @@ export class CodeExecutionService {
         const totalCount = testCaseResults.length;
 
         let status: CodeExecutionResult['status'] = 'ACCEPTED';
-        if (passedCount < totalCount) status = 'WRONG_ANSWER';
+        let errorMessage: string | undefined;
 
-        if (testCaseResults.some(r => r.error === 'Time Limit Exceeded')) status = 'TIME_LIMIT_EXCEEDED';
-        else if (testCaseResults.some(r => r.error && r.error.includes('error'))) status = 'RUNTIME_ERROR';
+        // Priority: CE > RE > TLE > MLE > WA > AC
+        if (testCaseResults.some(r => r.error && r.error.includes('Compilation'))) status = 'COMPILATION_ERROR';
+        else if (testCaseResults.some(r => r.error && r.error.includes('Memory'))) status = 'MEMORY_LIMIT_EXCEEDED';
+        else if (testCaseResults.some(r => r.error === 'Time Limit Exceeded')) status = 'TIME_LIMIT_EXCEEDED';
+        else if (testCaseResults.some(r => r.error)) status = 'RUNTIME_ERROR';
+        else if (passedCount < totalCount) status = 'WRONG_ANSWER';
+
+        if (status !== 'ACCEPTED') {
+            errorMessage = testCaseResults.find(r => r.error)?.error;
+            // If WA, maybe show diff?
+        }
 
         const totalExecutionTime = testCaseResults.reduce((acc, r) => acc + r.executionTime, 0);
         const maxMemoryUsed = testCaseResults.reduce((acc, r) => Math.max(acc, r.memoryUsed), 0);
@@ -384,186 +241,17 @@ export class CodeExecutionService {
             totalCount,
             executionTime: totalExecutionTime,
             memoryUsed: maxMemoryUsed,
+            errorMessage
         };
     }
 
-    private async executeTestCaseDocker(
-        code: string,
-        language: string,
-        input: string,
-        expectedOutput: string,
-        timeLimit: number,
-        memoryLimit: number
-    ): Promise<Omit<TestCaseResult, 'testCaseId'>> {
-        const startTime = Date.now();
-
-        try {
-            // Create container configuration
-            const containerConfig = this.getContainerConfig(language, code, input, timeLimit, memoryLimit);
-
-            // Create and start container
-            const container = await this.docker.createContainer(containerConfig);
-            await container.start();
-
-            // Wait for container to finish with timeout
-            const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('Execution timeout')), timeLimit);
-            });
-
-            const executionPromise = container.wait();
-
-            await Promise.race([executionPromise, timeoutPromise]);
-
-            // Get container logs
-            const logs = await container.logs({
-                stdout: true,
-                stderr: true,
-            });
-
-            // Clean up container
-            await container.remove({ force: true });
-
-            const executionTime = Date.now() - startTime;
-            const actualOutput = logs.toString().trim();
-
-            // Compare output
-            const passed = this.compareOutputs(actualOutput, expectedOutput.trim());
-
-            // Get memory usage (simplified - in production, use container stats)
-            const memoryUsed = 10; // Placeholder
-
-            return {
-                passed,
-                actualOutput,
-                expectedOutput,
-                executionTime,
-                memoryUsed,
-            };
-        } catch (error: any) {
-            const executionTime = Date.now() - startTime;
-
-            return {
-                passed: false,
-                expectedOutput,
-                executionTime,
-                memoryUsed: 0,
-                error: error.message,
-            };
-        }
-    }
-
-    private getContainerConfig(
-        language: string,
-        code: string,
-        input: string,
-        timeLimit: number,
-        memoryLimit: number
-    ): any {
-        const configs: Record<string, any> = {
-            python: {
-                Image: 'python:3.11-alpine',
-                Cmd: ['python', '-c', code],
-                Tty: false,
-                AttachStdin: true,
-                AttachStdout: true,
-                AttachStderr: true,
-                OpenStdin: true,
-                StdinOnce: true,
-                HostConfig: {
-                    Memory: memoryLimit * 1024 * 1024,
-                    NetworkMode: 'none',
-                    AutoRemove: false,
-                },
-            },
-            javascript: {
-                Image: 'node:20-alpine',
-                Cmd: ['node', '-e', code],
-                Tty: false,
-                AttachStdin: true,
-                AttachStdout: true,
-                AttachStderr: true,
-                OpenStdin: true,
-                StdinOnce: true,
-                HostConfig: {
-                    Memory: memoryLimit * 1024 * 1024,
-                    NetworkMode: 'none',
-                    AutoRemove: false,
-                },
-            },
-            java: {
-                Image: 'openjdk:17-alpine',
-                Cmd: ['sh', '-c', `echo '${code}' > Solution.java && javac Solution.java && java Solution`],
-                Tty: false,
-                AttachStdin: true,
-                AttachStdout: true,
-                AttachStderr: true,
-                OpenStdin: true,
-                StdinOnce: true,
-                HostConfig: {
-                    Memory: memoryLimit * 1024 * 1024,
-                    NetworkMode: 'none',
-                    AutoRemove: false,
-                },
-            },
-            cpp: {
-                Image: 'gcc:latest',
-                Cmd: ['sh', '-c', `echo '${code}' > solution.cpp && g++ solution.cpp -o solution && ./solution`],
-                Tty: false,
-                AttachStdin: true,
-                AttachStdout: true,
-                AttachStderr: true,
-                OpenStdin: true,
-                StdinOnce: true,
-                HostConfig: {
-                    Memory: memoryLimit * 1024 * 1024,
-                    NetworkMode: 'none',
-                    AutoRemove: false,
-                },
-            },
-        };
-
-        return configs[language] || configs.python;
-    }
-
-    private compareOutputs(actual: string, expected: string): boolean {
-        // Use production-grade normalizer with lenient array formatting
-        // This accepts both "[1, 2, 3]" and "1 2 3" as valid matches
-        const normalize = (output: string) => OutputNormalizer.normalize(output, {
-            stripArrayFormat: true,
-            trimLines: true,
-            removeEmptyLines: true,
-            normalizeWhitespace: true
+    // Legacy helper kept for API compatibility if needed
+    public async addExecutionJob(submissionId: string, request: CodeExecutionRequest): Promise<void> {
+        const queueService = QueueService.getInstance();
+        await queueService.addExecutionJob({
+            submissionId,
+            ...request
         });
-
-        const normalizedActual = normalize(actual);
-        const normalizedExpected = normalize(expected);
-
-        return normalizedActual === normalizedExpected;
-    }
-
-    private isSupportedLanguage(language: string): boolean {
-        const supportedLanguages = ['python', 'java', 'cpp', 'javascript', 'go', 'rust'];
-        return supportedLanguages.includes(language.toLowerCase());
-    }
-
-    private createErrorResult(
-        status: CodeExecutionResult['status'],
-        errorMessage: string,
-        totalCount: number
-    ): CodeExecutionResult {
-        return {
-            status,
-            testCaseResults: [],
-            passedCount: 0,
-            totalCount,
-            executionTime: 0,
-            memoryUsed: 0,
-            errorMessage,
-        };
-    }
-
-    public async executeWithLambda(request: CodeExecutionRequest): Promise<CodeExecutionResult> {
-        throw new Error('Lambda execution not implemented yet');
     }
 }
 

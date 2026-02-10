@@ -1,278 +1,315 @@
-# LETS_PREP - Competitive Programming Platform
+# LETS_PREP_ - Production-Grade Online Judge Platform
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-16.0-black)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
+A secure, scalable online coding platform with real-time code execution, competitive programming features, and classroom management.
 
-**LETS_PREP** is a real-time educational platform designed to streamline coding education through virtual classrooms and live competitive programming contests. In modern academic and technical training environments, educators often rely on disjointed tools for curriculum management, code compilation, and student assessment. This fragmentation leads to inefficiencies, administrative overhead, delayed feedback loops, and a lack of cohesive performance tracking.
+## 🚀 Features
 
-- **LETS_PREP** addresses these challenges by offering a centralized environment where teachers can collaboratively manage classrooms, curate problem sets, and host live coding battles with automated grading.
-- The platform ensures seamless code execution across multiple languages (Python, Java, C++, JavaScript), maintains real-time leaderboards for student engagement, enforces secure role-based access control, and provides a scalable backend capable of handling concurrent submissions with low latency.
+### Core Features
+- ✅ **Secure Code Execution**: Docker-isolated execution for C++, Python, Java, JavaScript
+- ✅ **30+ LeetCode-style Problems**: Comprehensive test cases for each problem
+- ✅ **Real-time Leaderboards**: Live competition tracking
+- ✅ **Classroom Management**: Teacher dashboards, student progress tracking
+- ✅ **Battle Mode**: 1v1 coding competitions
+- ✅ **Competition System**: Timed contests with rankings
 
-The project demonstrates practical implementation of modern full-stack development, real-time database synchronization, secure code execution architecture, and cloud-native authentication practices. It is suitable for academic evaluation as well as a professional portfolio-grade project.
+### Security Features
+- 🔒 **Docker Isolation**: Each submission runs in isolated container
+- 🔒 **Resource Limits**: CPU, Memory, Time constraints enforced
+- 🔒 **Network Isolation**: Containers have no network access
+- 🔒 **Seccomp Filtering**: Syscall restrictions via seccomp profile
+- 🔒 **No Privilege Escalation**: Security hardening enabled
+- 🔒 **Automatic Cleanup**: Containers destroyed after execution
 
-## 📋 Table of Contents
-
-- [Features](#-features)
-- [Tech Stack](#-tech-stack)
-- [Getting Started](#-getting-started)
-- [Project Structure](#-project-structure)
-- [Environment Variables](#-environment-variables)
-- [Development](#-development)
-- [Deployment](#-deployment)
-- [Contributing](#-contributing)
-- [License](#-license)
-
-## ✨ Features
-
-### For Students
-- 🎯 **Interactive Code Editor** - Multi-language support (Python, JavaScript, Java, C++, Go, Rust)
-- ⚡ **Real-time Code Execution** - Fast and secure code execution environment
-- 🏆 **Battle Rooms** - Compete with peers in real-time coding challenges
-- 📊 **Analytics Dashboard** - Track your progress and performance metrics
-- 🎓 **Problem Library** - Curated collection of coding problems with varying difficulty
-- 🔥 **Leaderboards** - Global and room-specific rankings
-
-### For Teachers
-- 👥 **Student Management** - Monitor student progress and performance
-- 🎮 **Competition Creation** - Create and manage coding competitions
-- 📈 **Analytics & Insights** - Detailed analytics on student performance
-- 🔗 **Room Management** - Create and manage battle rooms with join links
-
-### Platform Features
-- 🔐 **Secure Authentication** - Supabase-powered authentication with role-based access
-- 🌙 **Dark/Light Mode** - Beautiful UI with theme support
-- 📱 **Responsive Design** - Works seamlessly on all devices
-- ⚡ **Performance Optimized** - Built with Next.js 16 and Turbopack
-- 🔄 **Real-time Updates** - WebSocket-based live updates
-
-## 🛠 Tech Stack
-
-### Frontend
-- **Framework**: Next.js 16 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **UI Components**: Radix UI, shadcn/ui
-- **Animations**: Framer Motion
-- **State Management**: React Hooks
-- **Charts**: Recharts
-
-### Backend
-- **Runtime**: Node.js
-- **Language**: TypeScript
-- **Database**: Supabase (PostgreSQL)
-- **Authentication**: Supabase Auth
-- **Real-time**: WebSockets
-- **Code Execution**: Docker containers (isolated environments)
-
-### DevOps & Tools
-- **Version Control**: Git & GitHub
-- **Package Manager**: npm
-- **Code Quality**: ESLint, Prettier
-- **Deployment**: Vercel (Frontend), Custom (Backend)
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Node.js >= 18.0.0
-- npm or yarn
-- Git
-- Docker (for code execution features)
-- Supabase account
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/Pantkartik/LETS_PREP_.git
-   cd LETS_PREP_
-   ```
-
-2. **Install Frontend dependencies**
-   ```bash
-   cd Frontend
-   npm install
-   ```
-
-3. **Install Backend dependencies**
-   ```bash
-   cd ../Backend
-   npm install
-   ```
-
-4. **Set up environment variables**
-
-   **Frontend** (`Frontend/.env.local`):
-   ```bash
-   cp Frontend/.env.example Frontend/.env.local
-   # Edit .env.local with your Supabase credentials
-   ```
-
-   **Backend** (`Backend/.env`):
-   ```bash
-   cp Backend/.env.example Backend/.env
-   # Edit .env with your configuration
-   ```
-
-5. **Start the development servers**
-
-   **Frontend** (Terminal 1):
-   ```bash
-   cd Frontend
-   npm run dev
-   ```
-
-   **Backend** (Terminal 2):
-   ```bash
-   cd Backend
-   npm run dev
-   ```
-
-6. **Access the application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:3001
+### Technical Highlights
+- ⚡ **Template Engine**: Auto-generates input parsing for C++ signatures
+- ⚡ **Validation Modes**: Exact match, floating-point (epsilon), custom validators
+- ⚡ **Async Execution**: Bull queue for background job processing
+- ⚡ **Real-time Updates**: WebSocket support for live competitions
+- ⚡ **Row Level Security**: Supabase RLS for data protection
 
 ## 📁 Project Structure
 
 ```
 LETS_PREP_/
-├── Frontend/                 # Next.js frontend application
-│   ├── app/                 # App router pages
-│   │   ├── (auth)/         # Authentication pages
-│   │   ├── dashboard/      # Student dashboard
-│   │   ├── teacher/        # Teacher portal
-│   │   ├── analytics/      # Analytics page
-│   │   └── competitions/   # Competitions page
-│   ├── components/         # React components
-│   │   ├── ui/            # shadcn/ui components
-│   │   └── ...            # Custom components
-│   ├── lib/               # Utility functions
-│   ├── public/            # Static assets
-│   └── styles/            # Global styles
-│
-├── Backend/                # Backend API server
+├── Backend/                 # Node.js + Express API
 │   ├── src/
-│   │   ├── routes/        # API routes
-│   │   ├── controllers/   # Request handlers
-│   │   ├── services/      # Business logic
-│   │   ├── middleware/    # Express middleware
-│   │   └── utils/         # Utility functions
-│   ├── logs/              # Application logs
-│   └── .env.example       # Environment template
-│
-├── .gitignore             # Git ignore rules
-├── README.md              # This file
-└── LICENSE                # MIT License
+│   │   ├── services/
+│   │   │   ├── execution/   # Code execution engine
+│   │   │   │   ├── IsolationManager.ts
+│   │   │   │   ├── TemplateEngine.ts
+│   │   │   │   └── Validator.ts
+│   │   │   └── codeExecution.service.ts
+│   │   ├── controllers/     # API controllers
+│   │   ├── routes/          # API routes
+│   │   └── definitions/     # Language configs
+│   ├── scripts/             # Utility scripts
+│   └── seccomp_profile.json # Security profile
+├── Frontend/                # Next.js 16 + React
+│   ├── app/                 # App router pages
+│   ├── components/          # React components
+│   ├── lib/                 # Utilities
+│   └── supabase/            # Database migrations
+└── .github/
+    └── workflows/           # CI/CD pipelines
 ```
 
-## 🔐 Environment Variables
-
-### Frontend Environment Variables
-
-Create `Frontend/.env.local`:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
-```
-
-### Backend Environment Variables
-
-Create `Backend/.env`:
-
-```env
-NODE_ENV=development
-PORT=3001
-SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-JWT_SECRET=your_jwt_secret
-```
-
-See `.env.example` files for complete configuration options.
-
-## 💻 Development
-
-### Running Tests
-```bash
-npm test
-```
-
-### Linting
-```bash
-npm run lint
-```
-
-### Building for Production
-
-**Frontend**:
-```bash
-cd Frontend
-npm run build
-npm start
-```
-
-**Backend**:
-```bash
-cd Backend
-npm run build
-npm start
-```
-
-## 🚢 Deployment
-
-### Frontend (Vercel)
-
-1. Push your code to GitHub
-2. Import project in Vercel
-3. Configure environment variables
-4. Deploy
+## 🛠️ Tech Stack
 
 ### Backend
+- **Runtime**: Node.js 20+
+- **Framework**: Express.js
+- **Database**: Supabase (PostgreSQL)
+- **Queue**: Bull (Redis)
+- **Execution**: Docker + Dockerode
+- **Validation**: Zod
+- **Auth**: JWT + Supabase Auth
 
-1. Set up your server (AWS, DigitalOcean, etc.)
-2. Configure environment variables
-3. Set up Docker for code execution
-4. Deploy using PM2 or similar process manager
+### Frontend
+- **Framework**: Next.js 16 (App Router)
+- **UI**: React 19 + Tailwind CSS
+- **Components**: Radix UI + shadcn/ui
+- **Code Editor**: Monaco Editor
+- **State**: React Hooks
+- **Auth**: Supabase Auth
+
+### DevOps
+- **Containerization**: Docker
+- **CI/CD**: GitHub Actions
+- **Security**: TruffleHog, Dependabot, CodeRabbit
+- **Monitoring**: Vercel Analytics (optional)
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 20+
+- Docker Desktop
+- Git
+- Supabase account
+
+### 1. Clone Repository
+
+```bash
+git clone https://github.com/YOUR_USERNAME/LETS_PREP_.git
+cd LETS_PREP_
+```
+
+### 2. Backend Setup
+
+```bash
+cd Backend
+
+# Install dependencies
+npm install
+
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your Supabase credentials
+# Get from: https://app.supabase.com/project/_/settings/api
+
+# Pull Docker images for code execution
+npx ts-node pull_images.ts
+
+# Start development server
+npm run dev
+```
+
+Backend runs on `http://localhost:3001`
+
+### 3. Frontend Setup
+
+```bash
+cd Frontend
+
+# Install dependencies
+npm install
+
+# Copy environment template
+cp .env.example .env.local
+
+# Edit .env.local with your Supabase credentials
+
+# Start development server
+npm run dev
+```
+
+Frontend runs on `http://localhost:3000`
+
+### 4. Database Setup
+
+1. Go to Supabase Dashboard → SQL Editor
+2. Run migrations in order:
+   - `Frontend/supabase/complete_setup.sql`
+   - `Frontend/supabase/add_all_testcases.sql`
+
+### 5. Verify Installation
+
+```bash
+cd Backend
+npx ts-node verify_engine.ts
+```
+
+Should output: ✅ All tests passed
+
+## 📚 Documentation
+
+- **[Security Policy](SECURITY.md)** - Security measures and reporting
+- **[GitHub Push Guide](GITHUB_PUSH_GUIDE.md)** - Secure deployment checklist
+- **[Pre-Push Checklist](PRE_PUSH_CHECKLIST.md)** - Before committing
+- **[Test Case Management](Backend/TEST_CASE_MANAGEMENT.md)** - Adding test cases
+- **[Security Audit Report](SECURITY_AUDIT_REPORT.md)** - Latest audit results
+
+## 🔒 Security
+
+This project implements industry-standard security practices:
+
+- ✅ No secrets in source code
+- ✅ Environment variables for all credentials
+- ✅ Docker isolation for untrusted code
+- ✅ Input validation and sanitization
+- ✅ SQL injection prevention
+- ✅ XSS protection
+- ✅ CSRF protection
+- ✅ Rate limiting
+- ✅ Automated security audits
+
+**Found a security vulnerability?** Email: security@lets-prep.com
+
+## 🧪 Testing
+
+### Run Tests
+
+```bash
+# Backend unit tests
+cd Backend
+npm test
+
+# Frontend tests
+cd Frontend
+npm test
+
+# E2E tests
+npm run test:e2e
+```
+
+### Test Code Execution
+
+```bash
+cd Backend
+npx ts-node test_find_k_closest.ts
+```
+
+## 📦 Deployment
+
+### Vercel (Frontend)
+
+```bash
+cd Frontend
+npx vercel
+```
+
+### Railway (Backend)
+
+```bash
+cd Backend
+railway init
+railway up
+```
+
+### Docker Compose
+
+```bash
+docker-compose up -d
+```
+
+See **[GITHUB_PUSH_GUIDE.md](GITHUB_PUSH_GUIDE.md)** for detailed deployment instructions.
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please follow these steps:
-
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'feat: add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open Pull Request
 
-### Code Style
+**Note**: All PRs are automatically reviewed by CodeRabbit AI.
 
-- Follow TypeScript best practices
-- Use ESLint and Prettier for code formatting
-- Write meaningful commit messages
-- Add comments for complex logic
+## 📝 Environment Variables
+
+### Backend (.env)
+
+```env
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+JWT_SECRET=your_jwt_secret
+DOCKER_ENABLED=true
+```
+
+See `.env.example` for complete list.
+
+### Frontend (.env.local)
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+NEXT_PUBLIC_API_URL=http://localhost:3001
+```
+
+## 🏗️ Architecture
+
+### Code Execution Flow
+
+```
+User Code → API → Queue → Worker → IsolationManager → Docker Container
+                                                            ↓
+Expected Output ← Validator ← TemplateEngine ← Container Output
+```
+
+### Security Layers
+
+1. **Input Validation**: Zod schemas
+2. **Template Injection**: Safe code wrapping
+3. **Docker Isolation**: Container per execution
+4. **Resource Limits**: CPU/Memory/Time constraints
+5. **Seccomp Profile**: Syscall filtering
+6. **Output Validation**: Normalized comparison
+
+## 📊 Performance
+
+- **Execution Time**: ~2-5s per submission (including Docker overhead)
+- **Concurrent Executions**: Limited by Docker resources
+- **Scalability**: Horizontal scaling via worker nodes
+- **Caching**: Template compilation cached
+
+## 🐛 Known Issues
+
+- [ ] Nested vector types not fully supported in C++ parser
+- [ ] Python async/await requires special handling
+- [ ] Java class name must be "Solution"
+
+See [Issues](https://github.com/YOUR_USERNAME/LETS_PREP_/issues) for full list.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) file
 
-## 👥 Authors
+## 👥 Team
 
-- **Pantkartik** - [GitHub](https://github.com/Pantkartik)
+- **Developer**: Your Name
+- **Security**: security@lets-prep.com
+- **Support**: support@lets-prep.com
 
 ## 🙏 Acknowledgments
 
-- Next.js team for the amazing framework
-- Supabase for the backend infrastructure
-- shadcn for the beautiful UI components
-- All contributors and supporters
-
-## 📞 Support
-
-For support, email kartikpant.kp69@gmail.com or open an issue in the GitHub repository.
+- LeetCode for problem inspiration
+- Supabase for backend infrastructure
+- Docker for secure execution environment
+- shadcn/ui for beautiful components
 
 ---
 
-**Built with ❤️ for competitive programmers**
+**⭐ Star this repo if you find it useful!**
+
+**🐛 Report bugs**: [GitHub Issues](https://github.com/YOUR_USERNAME/LETS_PREP_/issues)
+
+**💬 Discussions**: [GitHub Discussions](https://github.com/YOUR_USERNAME/LETS_PREP_/discussions)

@@ -79,6 +79,7 @@ export class SubmissionController {
                 testCases: problem.test_cases,
                 timeLimit: problem.time_limit_ms,
                 memoryLimit: problem.memory_limit_mb,
+                validationConfig: problem.validation_config || { mode: 'exact' } // Default to exact match
             };
 
             // Check if we should use Queue (Async Worker)
@@ -204,6 +205,7 @@ export class SubmissionController {
                 testCases: casesToRun,
                 timeLimit: 5000,
                 memoryLimit: 256,
+                validationConfig: req.body.validationConfig || { mode: 'exact' } // Allow custom validation
             });
 
             // Format response to support both single input (old) and batch (new)

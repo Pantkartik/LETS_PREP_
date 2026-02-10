@@ -1,78 +1,98 @@
 # Security Policy
 
-## Supported Versions
+## Reporting Security Vulnerabilities
 
-We release patches for security vulnerabilities. Which versions are eligible for receiving such patches depends on the CVSS v3.0 Rating:
+If you discover a security vulnerability, please email security@lets-prep.com or create a private security advisory on GitHub.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.x.x   | :white_check_mark: |
-| < 1.0   | :x:                |
+**DO NOT** create a public issue for security vulnerabilities.
 
-## Reporting a Vulnerability
+## Security Measures Implemented
 
-**Please do not report security vulnerabilities through public GitHub issues.**
+### 1. Environment Variables
+- All sensitive keys stored in `.env` files (gitignored)
+- No hardcoded API keys or secrets in source code
+- Separate environment files for development and production
 
-Instead, please report them via email to: security@example.com (replace with your email)
+### 2. Code Execution Security
+- **Docker Isolation**: All user code runs in isolated containers
+- **Resource Limits**: CPU (1 core), Memory (256MB default), Time limits enforced
+- **Network Isolation**: Containers have no network access (`NetworkMode: 'none'`)
+- **Capability Dropping**: All Linux capabilities dropped (`CapDrop: ['ALL']`)
+- **No Privilege Escalation**: `no-new-privileges` security option enabled
+- **Seccomp Profile**: Syscall filtering via `seccomp_profile.json`
+- **Read-only Root**: Container filesystem is read-only where possible
+- **Automatic Cleanup**: Containers and temporary files deleted after execution
 
-You should receive a response within 48 hours. If for some reason you do not, please follow up via email to ensure we received your original message.
+### 3. API Security
+- Rate limiting on all endpoints
+- CORS configuration for allowed origins
+- Input validation using Zod schemas
+- SQL injection prevention via Supabase parameterized queries
+- XSS protection via Content Security Policy headers
 
-Please include the following information:
+### 4. Authentication & Authorization
+- JWT-based authentication
+- Supabase Row Level Security (RLS) policies
+- Service role keys only used server-side
+- Anon keys for client-side (limited permissions)
 
-* Type of issue (e.g. buffer overflow, SQL injection, cross-site scripting, etc.)
-* Full paths of source file(s) related to the manifestation of the issue
-* The location of the affected source code (tag/branch/commit or direct URL)
-* Any special configuration required to reproduce the issue
-* Step-by-step instructions to reproduce the issue
-* Proof-of-concept or exploit code (if possible)
-* Impact of the issue, including how an attacker might exploit the issue
+### 5. Database Security
+- Row Level Security (RLS) enabled on all tables
+- Encrypted connections (SSL/TLS)
+- Prepared statements prevent SQL injection
+- Sensitive data encrypted at rest
 
-## Security Best Practices
+### 6. Dependencies
+- Regular dependency audits via `npm audit`
+- Automated security updates via Dependabot
+- Minimal dependency footprint
 
-### Environment Variables
+## Security Checklist Before Deployment
 
-* **Never commit `.env` files** - They contain sensitive credentials
-* Use `.env.example` as a template with placeholder values
-* Rotate secrets regularly in production
-* Use different credentials for development and production
+- [ ] All `.env` files are gitignored
+- [ ] No API keys in source code
+- [ ] Docker daemon is secured
+- [ ] Rate limiting is configured
+- [ ] CORS origins are restricted
+- [ ] Database RLS policies are active
+- [ ] SSL/TLS certificates are valid
+- [ ] Secrets are stored in environment variables or secret manager
+- [ ] Security headers are configured (CSP, HSTS, etc.)
+- [ ] Input validation is comprehensive
+- [ ] Error messages don't leak sensitive info
+- [ ] Logging doesn't include secrets
 
-### Authentication
+## Secure Development Practices
 
-* All authentication is handled through Supabase
-* JWT tokens are used for session management
-* Tokens expire after 7 days by default
-* Refresh tokens are used for extended sessions
+1. **Never commit**:
+   - `.env` files
+   - API keys or tokens
+   - Private keys
+   - Database credentials
+   - Session secrets
 
-### Code Execution
+2. **Always use**:
+   - Environment variables for secrets
+   - Parameterized queries
+   - Input validation
+   - HTTPS in production
+   - Secure headers
 
-* All code execution happens in isolated Docker containers
-* Execution time is limited to prevent resource exhaustion
-* Memory limits are enforced
-* Network access is restricted in execution environments
+3. **Regular audits**:
+   - Run `npm audit` weekly
+   - Review dependencies monthly
+   - Update security patches immediately
+   - Scan for secrets with tools like `git-secrets`
 
-### API Security
+## Incident Response
 
-* Rate limiting is enforced on all API endpoints
-* CORS is configured to allow only trusted origins
-* Input validation is performed on all user inputs
-* SQL injection protection through parameterized queries
+If a security breach occurs:
 
-### Data Protection
+1. **Immediate**: Rotate all compromised credentials
+2. **Within 1 hour**: Assess impact and contain breach
+3. **Within 24 hours**: Notify affected users
+4. **Within 1 week**: Publish post-mortem and remediation plan
 
-* All data is encrypted in transit (HTTPS/WSS)
-* Sensitive data is encrypted at rest in Supabase
-* User passwords are hashed using bcrypt
-* Personal data follows GDPR compliance guidelines
+## Contact
 
-## Disclosure Policy
-
-When we receive a security bug report, we will:
-
-1. Confirm the problem and determine the affected versions
-2. Audit code to find any similar problems
-3. Prepare fixes for all supported versions
-4. Release new security fix versions as soon as possible
-
-## Comments on this Policy
-
-If you have suggestions on how this process could be improved, please submit a pull request.
+Security Team: security@lets-prep.com

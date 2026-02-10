@@ -1,0 +1,35 @@
+name: CodeRabbit AI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  coderabbit-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      
+    steps:
+    - name: CodeRabbit AI Review
+      uses: coderabbitai/ai-pr-reviewer@latest
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+        language: en-US
+        review_simple_changes: false
+        review_comment_lgtm: false
+        path_filters: |
+          !dist/**
+          !build/**
+          !*.lock
+          !*.log
+        system_message: |
+          You are a senior software engineer reviewing code for security vulnerabilities,
+          performance issues, and best practices. Focus on:
+          - Security vulnerabilities (SQL injection, XSS, secrets in code)
+          - Docker security (container isolation, resource limits)
+          - Input validation and sanitization
+          - Error handling and logging
+          - Code quality and maintainability

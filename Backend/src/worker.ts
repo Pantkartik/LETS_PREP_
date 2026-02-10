@@ -32,7 +32,8 @@ const startWorker = async () => {
                 language,
                 testCases,
                 timeLimit,
-                memoryLimit
+                memoryLimit,
+                validationConfig: job.data.validationConfig // Pass validation config if present
             });
 
             // Update Database with Result
