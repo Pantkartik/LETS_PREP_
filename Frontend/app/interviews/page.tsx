@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardSidebar } from '@/components/dashboard-sidebar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -143,7 +143,19 @@ export default function InterviewSimulatorPage() {
                               {type.duration}
                             </Badge>
                           </div>
-                          <Button className="w-full bg-primary hover:bg-primary/90">
+                          <Button
+                            className="w-full bg-primary hover:bg-primary/90"
+                            onClick={async () => {
+                              try {
+                                const { startInterview } = await import('@/lib/actions/interviews');
+                                const session = await startInterview(type.id, type.difficulty, 'General');
+                                window.location.href = `/interviews/${session.id}`;
+                              } catch (e) {
+                                console.error(e);
+                                // toast.error("Failed to start interview");
+                              }
+                            }}
+                          >
                             <Play className="w-4 h-4 mr-2" />
                             Start Interview
                           </Button>
@@ -235,46 +247,11 @@ export default function InterviewSimulatorPage() {
             </TabsContent>
 
             {/* Past Interviews Tab */}
+            {/* Past Interviews Tab */}
             <TabsContent value="history" className="space-y-4">
-              <div className="grid gap-4">
-                {pastInterviews.map((interview) => (
-                  <Card
-                    key={interview.id}
-                    className="border-border/50 bg-card/50 p-6 hover:bg-card/80 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-2 flex-1">
-                        <div className="flex items-center gap-3">
-                          <h3 className="font-bold text-lg">{interview.type}</h3>
-                          <Badge
-                            className={
-                              interview.score >= 90
-                                ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                                : interview.score >= 70
-                                  ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
-                                  : 'bg-red-500/20 text-red-400 border-red-500/30'
-                            }
-                          >
-                            Score: {interview.score}%
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-4 h-4" />
-                            {interview.duration}
-                          </div>
-                          <div>{interview.date}</div>
-                          <div className="flex items-center gap-1">
-                            <Award className="w-4 h-4" />
-                            {interview.feedback}
-                          </div>
-                        </div>
-                      </div>
-                      <Button variant="ghost">View Details</Button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+              {/* fetching logic handled inside a component would be better for server components, 
+                   but since this is a client page (use client), we can fetch in useEffect */}
+              <HistoryList />
             </TabsContent>
 
             {/* Analytics Tab */}
@@ -348,6 +325,66 @@ export default function InterviewSimulatorPage() {
           </Tabs>
         </div>
       </main>
+    </div>
+  );
+}
+
+function HistoryList() {
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    import('@/lib/actions/interviews').then(({ getInterviewHistory }) => {
+      getInterviewHistory().then(data => {
+        setHistory(data);
+        setLoading(false);
+      });
+    });
+  }, []);
+
+  if (loading) return <div>Loading history...</div>;
+  if (history.length === 0) return <div className="text-muted-foreground p-4">No interviews yet. Start one!</div>;
+
+  return (
+    <div className="grid gap-4">
+      {history.map((interview) => (
+        <Card
+          key={interview.id}
+          className="border-border/50 bg-card/50 p-6 hover:bg-card/80 transition-colors"
+        >
+          <div className="flex items-center justify-between">
+            <div className="space-y-2 flex-1">
+              <div className="flex items-center gap-3">
+                <h3 className="font-bold text-lg capitalize">{interview.type}</h3>
+                <Badge
+                  className={
+                    (interview.score || 0) >= 90
+                      ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                      : (interview.score || 0) >= 70
+                        ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+                        : 'bg-red-500/20 text-red-400 border-red-500/30'
+                  }
+                >
+                  Score: {interview.score || 0}%
+                </Badge>
+                <Badge variant="outline">{interview.status}</Badge>
+              </div>
+              <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <Clock className="w-4 h-4" />
+                  {new Date(interview.created_at).toLocaleDateString()}
+                </div>
+              </div>
+            </div>
+            {interview.status === 'completed' && (
+              <Button variant="ghost" onClick={() => window.location.href = `/interviews/${interview.id}`}>Review</Button>
+            )}
+            {interview.status === 'in_progress' && (
+              <Button variant="default" size="sm" onClick={() => window.location.href = `/interviews/${interview.id}`}>Resume</Button>
+            )}
+          </div>
+        </Card>
+      ))}
     </div>
   );
 }
