@@ -174,52 +174,78 @@ export function useUserProfile() {
                         }
                     }
 
-                    // Fetch Teacher Stats if applicable
-                    if (data.role === 'TEACHER') {
-                        const { data: teacherStats, error: statsError } = await supabase
-                            .rpc('get_teacher_stats', { t_id: session.user.id });
-
-                        if (!statsError && teacherStats) {
-                            data.teacher_stats = teacherStats;
-                        } else if (statsError) {
-                            console.warn('Failed to fetch teacher stats:', statsError);
-                        }
-                    }
-
-                    // Get rank from leaderboard if student
-                    if (data.role === 'STUDENT') {
-                        const { data: leaderboardData, error: leaderboardError } = await supabase
-                            .from('global_leaderboard')
-                            .select('rank_position')
-                            .eq('id', session.user.id)
-                            .single();
-
-                        if (leaderboardError) {
-                            // console.warn('Could not fetch leaderboard rank:', leaderboardError.message);
-                        } else if (leaderboardData) {
-                            data.rank_position = leaderboardData.rank_position;
-                        }
-
-                        // Fetch Judge Stats and Submissions
-                        try {
-                            const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-                            const [statsRes, submissionsRes] = await Promise.all([
-                                fetch(`${API_BASE_URL}/judge/stats/${session.user.id}`),
-                                fetch(`${API_BASE_URL}/judge/submissions/${session.user.id}`)
-                            ]);
-
-                            if (statsRes.ok) {
-                                data.judge_stats = await statsRes.json();
-                            }
-                            if (submissionsRes.ok) {
-                                data.latest_submissions = await submissionsRes.json();
-                            }
-                        } catch (err) {
-                            console.warn('Failed to fetch judge data:', err);
-                        }
-                    }
-
+                    // Set profile as soon as we have basic data
                     setProfile(data);
+                    setLoading(false);
+
+                    // Fetch secondary data in background (non-blocking)
+                    (async () => {
+                        const backgroundUpdates: Partial<UserProfile> = {};
+                        let hasUpdates = false;
+
+                        // Fetch Teacher Stats if applicable
+                        if (data.role === 'TEACHER') {
+                            try {
+                                const { data: teacherStats, error: statsError } = await supabase
+                                    .rpc('get_teacher_stats', { t_id: session.user.id });
+
+                                if (!statsError && teacherStats) {
+                                    backgroundUpdates.teacher_stats = teacherStats;
+                                    hasUpdates = true;
+                                }
+                            } catch (statsErr) {
+                                console.warn('Failed to fetch teacher stats:', statsErr);
+                            }
+                        }
+
+                        // Get rank and judge data if student
+                        if (data.role === 'STUDENT') {
+                            try {
+                                // 1. Leaderboard rank
+                                const { data: leaderboardData } = await supabase
+                                    .from('global_leaderboard')
+                                    .select('rank_position')
+                                    .eq('id', session.user.id)
+                                    .single();
+
+                                if (leaderboardData) {
+                                    backgroundUpdates.rank_position = leaderboardData.rank_position;
+                                    hasUpdates = true;
+                                }
+
+                                // 2. Judge Stats and Submissions (with timeout)
+                                const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+                                
+                                const fetchWithTimeout = async (url: string, timeout = 3000) => {
+                                    const controller = new AbortController();
+                                    const id = setTimeout(() => controller.abort(), timeout);
+                                    const response = await fetch(url, { signal: controller.signal });
+                                    clearTimeout(id);
+                                    return response;
+                                };
+
+                                const [statsRes, submissionsRes] = await Promise.allSettled([
+                                    fetchWithTimeout(`${API_BASE_URL}/judge/stats/${session.user.id}`),
+                                    fetchWithTimeout(`${API_BASE_URL}/judge/submissions/${session.user.id}`)
+                                ]);
+
+                                if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
+                                    backgroundUpdates.judge_stats = await statsRes.value.json();
+                                    hasUpdates = true;
+                                }
+                                if (submissionsRes.status === 'fulfilled' && submissionsRes.value.ok) {
+                                    backgroundUpdates.latest_submissions = await submissionsRes.value.json();
+                                    hasUpdates = true;
+                                }
+                            } catch (err) {
+                                console.warn('Background data fetch failed:', err);
+                            }
+                        }
+
+                        if (hasUpdates) {
+                            setProfile(prev => prev ? { ...prev, ...backgroundUpdates } : null);
+                        }
+                    })();
                 }
             } catch (err: any) {
                 const errorMessage = err?.message || 'Unknown error occurred';
