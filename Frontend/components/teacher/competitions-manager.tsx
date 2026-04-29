@@ -1,285 +1,529 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Code, Plus, Copy, Users, Clock, Trophy, Trash2, Edit2, Share2, BarChart3 } from 'lucide-react'
-import ActivityHeatmap from '@/components/activity-heatmap'
+import { 
+    Code, 
+    Plus, 
+    Copy, 
+    Users, 
+    Clock, 
+    Trophy, 
+    Trash2, 
+    Edit2, 
+    Share2, 
+    BarChart3, 
+    Zap, 
+    Sword,
+    ShieldCheck,
+    LayoutDashboard,
+    Search
+} from 'lucide-react'
 import { createGameRoom } from '@/lib/actions/teacher-competitions'
 import { forceDeleteRoom } from '@/lib/actions/force-delete'
-import { toast } from 'sonner' // Assuming sonner is installed, or use window.alert/console
+import { toast } from 'sonner'
+import Link from 'next/link'
 
-// Interface matching Database + UI needs
+import { createClient } from '@/lib/supabase-client'
+
 interface GameRoom {
     id: string
     title: string
     description: string | null
-    difficulty: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | null // DB uses UPPERCASE
+    difficulty: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | null
     status: 'DRAFT' | 'ACTIVE' | 'COMPLETED' | null
     start_time: string | null
     end_time: string | null
     max_participants: number | null
     invite_code: string
+    is_quiz_mode: boolean
+    is_battle_test: boolean
     participants_count?: number
+    pending_requests?: number
+    creator_id: string
 }
 
 interface CompetitionsManagerProps {
-    initialRooms: any[] // Using any strictly to avoid tedious DB type mapping for now
+    initialRooms: any[]
+    initialProblems: any[]
 }
 
-export default function CompetitionsManager({ initialRooms }: CompetitionsManagerProps) {
+export default function CompetitionsManager({ initialRooms, initialProblems }: CompetitionsManagerProps) {
     const [gameRooms, setGameRooms] = useState<GameRoom[]>(initialRooms)
     const [showModal, setShowModal] = useState(false)
-    const [copiedLink, setCopiedLink] = useState<string | null>(null)
+    const [isDeleting, setIsDeleting] = useState<string | null>(null)
+    const [activeTab, setActiveTab] = useState<'QUIZ' | 'BATTLE'>('QUIZ')
+    const [searchQuery, setSearchQuery] = useState('')
+    const [isLoading, setIsLoading] = useState(false)
 
-    // Form State
     const [formData, setFormData] = useState({
         title: '',
         description: '',
         difficulty: 'INTERMEDIATE' as const,
         maxParticipants: 50,
+        durationMinutes: 120,
+        selectedProblems: [] as string[],
+        isQuizMode: false,
+        isBattleTest: false
     })
 
-    // --- Handlers ---
+    const supabase = useMemo(() => createClient(), [])
+
+    useEffect(() => {
+        const fetchLatestData = async () => {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+
+            const { data: comps } = await supabase
+                .from('competitions')
+                .select('*')
+                .eq('creator_id', user.id)
+                .order('created_at', { ascending: false })
+
+            if (comps) {
+                const { data: participants } = await supabase
+                    .from('competition_participants')
+                    .select('competition_id, status')
+                    .in('competition_id', comps.map(c => c.id))
+
+                const newFormatted = comps.map((c: any) => {
+                    const pList = participants?.filter(p => p.competition_id === c.id) || []
+                    return {
+                        ...c,
+                        participants_count: pList.filter(p => p.status === 'ACCEPTED' || !p.status).length,
+                        pending_requests: pList.filter(p => p.status === 'PENDING').length
+                    }
+                })
+
+                // Check for new requests to notify teacher
+                const totalNewPending = newFormatted.reduce((acc, r) => acc + (r.pending_requests || 0), 0)
+                const totalOldPending = gameRooms.reduce((acc, r) => acc + (r.pending_requests || 0), 0)
+                
+                if (totalNewPending > totalOldPending) {
+                    toast.message("New Entry Request", {
+                        description: "A student is waiting for approval in one of your arenas.",
+                        icon: <Users className="w-4 h-4 text-primary" />,
+                    })
+                }
+
+                setGameRooms(newFormatted)
+            }
+        }
+
+        // Subscribe to both competitions and participants for this teacher
+        const channel = supabase
+            .channel('teacher-dashboard-sync')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'competitions' }, fetchLatestData)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_participants' }, fetchLatestData)
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [])
 
     const handleCreateGameRoom = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (!formData.isQuizMode && !formData.isBattleTest && formData.selectedProblems.length === 0) {
+            toast.error('Please select problems or enable a mode.')
+            return
+        }
 
         try {
-            const result = await createGameRoom({
-                title: formData.title,
-                description: formData.description,
-                difficulty: formData.difficulty,
-                maxParticipants: formData.maxParticipants
+            const result = await createGameRoom(formData)
+            if (!result.success || !result.room) throw new Error(result.error || 'Failed to create room')
+
+            setGameRooms([result.room, ...gameRooms])
+            setFormData({ 
+                title: '', description: '', difficulty: 'INTERMEDIATE', 
+                maxParticipants: 50, durationMinutes: 120, selectedProblems: [], 
+                isQuizMode: false, isBattleTest: false 
             })
-
-            if (!result.success || !result.room) {
-                throw new Error(result.error || 'Failed to create room')
-            }
-
-            // Optimistic Update or just append result
-            const newRoom = result.room
-            setGameRooms([newRoom, ...gameRooms])
-
-            // Reset Form
-            setFormData({ title: '', description: '', difficulty: 'INTERMEDIATE', maxParticipants: 50 })
             setShowModal(false)
-            toast.success('Game Room Created!')
-
+            toast.success(`${formData.isBattleTest ? 'Battle Arena' : 'Quiz'} Created!`)
         } catch (error: any) {
             toast.error(error.message)
         }
     }
 
-    const [isDeleting, setIsDeleting] = useState<string | null>(null);
-
     const handleDeleteRoom = async (id: string) => {
-        if (!confirm("Are you sure you want to delete this room? This action cannot be undone.")) return;
-
-        setIsDeleting(id);
-        const toastId = toast.loading('Deleting room...');
-
+        if (!confirm("Delete this room?")) return
+        setIsDeleting(id)
         try {
             const result = await forceDeleteRoom(id)
             if (result.success) {
                 setGameRooms(gameRooms.filter(r => r.id !== id))
-                toast.success('Room deleted successfully', { id: toastId })
-            } else {
-                console.error('Deletion error:', result.error);
-                throw new Error(result.error)
-            }
+                toast.success('Room deleted')
+            } else throw new Error(result.error)
         } catch (error: any) {
-            toast.error(`Failed to delete: ${error.message}`, { id: toastId })
+            toast.error(error.message)
         } finally {
-            setIsDeleting(null);
+            setIsDeleting(null)
         }
     }
 
     const handleCopyLink = (code: string) => {
-        const link = `${window.location.origin}/join?code=${code}`
-        navigator.clipboard.writeText(link)
-        setCopiedLink(code)
-        setTimeout(() => setCopiedLink(null), 2000)
+        navigator.clipboard.writeText(`${window.location.origin}/join?code=${code}`)
         toast.success('Invite link copied!')
     }
 
-    // --- UI Helpers ---
+    const toggleProblem = (id: string) => {
+        setFormData(prev => ({
+            ...prev,
+            selectedProblems: prev.selectedProblems.includes(id) 
+                ? prev.selectedProblems.filter(p => p !== id)
+                : [...prev.selectedProblems, id]
+        }))
+    }
+
+    const handleSelectRandomProblems = () => {
+        const easy = initialProblems.filter(p => p.difficulty === 'EASY').sort(() => 0.5 - Math.random()).slice(0, 2);
+        const medium = initialProblems.filter(p => p.difficulty === 'MEDIUM').sort(() => 0.5 - Math.random()).slice(0, 2);
+        const hard = initialProblems.filter(p => p.difficulty === 'HARD').sort(() => 0.5 - Math.random()).slice(0, 1);
+        
+        const randomProblems = [...easy, ...medium, ...hard];
+        setFormData(prev => ({
+            ...prev,
+            selectedProblems: randomProblems.map(p => p.id),
+            isQuizMode: true,
+            isBattleTest: false
+        }));
+        toast.success('Selected 2 Easy, 2 Medium, and 1 Hard problem!');
+    }
+
+    const handleSelectHardThree = () => {
+        const hard = initialProblems.filter(p => p.difficulty === 'HARD').sort(() => 0.5 - Math.random()).slice(0, 3);
+        setFormData(prev => ({
+            ...prev,
+            selectedProblems: hard.map(p => p.id),
+            isBattleTest: true,
+            isQuizMode: false
+        }));
+        toast.success('Selected 3 Hard problems for Battle Test!');
+    }
+
+    const filteredRooms = gameRooms.filter(room => {
+        const matchesSearch = room.title.toLowerCase().includes(searchQuery.toLowerCase())
+        if (activeTab === 'QUIZ') return matchesSearch && (room.is_quiz_mode || (!room.is_quiz_mode && !room.is_battle_test))
+        return matchesSearch && room.is_battle_test
+    })
 
     const getStatusColor = (status: string | null) => {
         switch (status) {
-            case 'ACTIVE': return 'bg-green-500/20 text-green-400'
-            case 'COMPLETED': return 'bg-muted text-muted-foreground'
-            default: return 'bg-yellow-500/20 text-yellow-400' // Draft
-        }
-    }
-
-    const getDifficultyColor = (diff: string | null) => {
-        switch (diff) {
-            case 'BEGINNER': return 'text-blue-400'
-            case 'INTERMEDIATE': return 'text-yellow-400'
-            case 'ADVANCED': return 'text-red-400'
-            default: return 'text-gray-400'
+            case 'ACTIVE': return 'bg-green-500/10 text-green-400 border-green-500/20'
+            case 'COMPLETED': return 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+            default: return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
         }
     }
 
     return (
-        <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+        <div className="flex-1 overflow-auto bg-slate-950 p-4 sm:p-8">
             <div className="max-w-7xl mx-auto space-y-8">
-
-                <div className="flex justify-between items-center">
-                    <h2 className="text-3xl font-bold tracking-tight">Game Rooms</h2>
-                    <Button onClick={() => setShowModal(true)} className="bg-primary hover:bg-primary/90 gap-2">
-                        <Plus className="w-4 h-4" /> Create Room
+                
+                {/* Header Section */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h1 className="text-4xl font-black tracking-tight text-white flex items-center gap-3">
+                            <LayoutDashboard className="w-10 h-10 text-primary" />
+                            Management Hub
+                        </h1>
+                        <p className="text-slate-400 mt-2">Create and manage your quizzes and battle arenas.</p>
+                    </div>
+                    <Button onClick={() => setShowModal(true)} size="lg" className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
+                        <Plus className="w-5 h-5 mr-2" /> Create New Session
                     </Button>
                 </div>
 
-                {/* Stats Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card className="border-border/50 bg-card/50 p-6">
-                        <p className="text-sm text-muted-foreground">Active Rooms</p>
-                        <p className="text-3xl font-bold">{gameRooms.filter((r) => r.status === 'ACTIVE').length}</p>
+                {/* Stats Section */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card className="p-6 bg-slate-900/50 border-white/5 backdrop-blur-xl">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Active Quizzes</p>
+                        <p className="text-3xl font-black text-primary mt-1">{gameRooms.filter(r => r.status === 'ACTIVE' && r.is_quiz_mode).length}</p>
                     </Card>
-                    <Card className="border-border/50 bg-card/50 p-6">
-                        <p className="text-sm text-muted-foreground">Total Participants</p>
-                        {/* Need to ensure participants_count is coming from DB view/query */}
-                        <p className="text-3xl font-bold">
-                            {gameRooms.reduce((sum, r) => sum + ((Array.isArray(r.participants_count) && r.participants_count[0]?.count) || 0), 0)}
+                    <Card className="p-6 bg-slate-900/50 border-white/5 backdrop-blur-xl">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Live Battles</p>
+                        <p className="text-3xl font-black text-red-500 mt-1">{gameRooms.filter(r => r.status === 'ACTIVE' && r.is_battle_test).length}</p>
+                    </Card>
+                    <Card className="p-6 bg-slate-900/50 border-white/5 backdrop-blur-xl">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Participants</p>
+                        <p className="text-3xl font-black text-blue-500 mt-1">
+                            {gameRooms.reduce((acc, r) => acc + (r.participants_count || 0), 0)}
                         </p>
                     </Card>
-                    <Card className="border-border/50 bg-card/50 p-6">
-                        <p className="text-sm text-muted-foreground">Drafts</p>
-                        <p className="text-3xl font-bold">{gameRooms.filter((r) => r.status === 'DRAFT').length}</p>
+                    <Card className="p-6 bg-slate-900/50 border-white/5 backdrop-blur-xl">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Completed Sessions</p>
+                        <p className="text-3xl font-black text-green-500 mt-1">{gameRooms.filter(r => r.status === 'COMPLETED').length}</p>
                     </Card>
                 </div>
 
-                {/* List */}
-                <div className="space-y-4">
-                    {gameRooms.length === 0 ? (
-                        <Card className="border-border/50 bg-card/50 p-12 text-center text-muted-foreground">
-                            <Trophy className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                            <p>No game rooms created yet.</p>
-                        </Card>
+                {/* Navigation Tabs */}
+                <div className="flex flex-col md:flex-row gap-6 items-center justify-between bg-slate-900/30 p-2 rounded-2xl border border-white/5">
+                    <div className="flex gap-2 p-1 bg-black/40 rounded-xl w-full md:w-auto">
+                        <button 
+                            onClick={() => setActiveTab('QUIZ')}
+                            className={`flex-1 md:w-48 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'QUIZ' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <Zap className="w-4 h-4" /> Classroom Quizzes
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('BATTLE')}
+                            className={`flex-1 md:w-48 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'BATTLE' ? 'bg-red-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <Sword className="w-4 h-4" /> Battle Arena
+                        </button>
+                    </div>
+
+                    <div className="relative w-full md:w-96 group">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-primary transition-colors" />
+                        <Input 
+                            placeholder={`Search ${activeTab === 'QUIZ' ? 'quizzes' : 'battles'}...`}
+                            className="pl-11 bg-black/40 border-white/10 rounded-xl"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                {/* Session List */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {filteredRooms.length === 0 ? (
+                        <div className="col-span-full py-32 flex flex-col items-center justify-center bg-slate-900/20 border-2 border-dashed border-white/5 rounded-3xl">
+                            <div className="w-20 h-20 bg-slate-900/50 rounded-full flex items-center justify-center mb-6 border border-white/5 group-hover:border-primary/20 transition-all">
+                                <Trophy className="w-10 h-10 text-slate-700" />
+                            </div>
+                            <h3 className="text-2xl font-black text-white uppercase italic tracking-tighter">No {activeTab} Sessions Found</h3>
+                            <p className="text-slate-500 mt-2 max-w-xs text-center font-medium">
+                                You haven't created any {activeTab.toLowerCase()} sessions yet. Start one now to challenge your students.
+                            </p>
+                            <Button onClick={() => setShowModal(true)} className="mt-8 bg-white text-black font-black uppercase italic px-8 h-12 hover:bg-slate-200">
+                                <Plus className="w-5 h-5 mr-2" /> Create First {activeTab === 'QUIZ' ? 'Quiz' : 'Battle'}
+                            </Button>
+                        </div>
                     ) : (
-                        gameRooms.map((room) => (
-                            <Card key={room.id} className="border-border/50 bg-card/50 p-6">
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
+                        filteredRooms.map((room) => (
+                            <Card key={room.id} className="group relative bg-slate-900/40 border-white/5 hover:border-primary/30 transition-all duration-300 overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                    {room.is_battle_test ? <Sword className="w-24 h-24 text-red-500" /> : <Zap className="w-24 h-24 text-primary" />}
+                                </div>
+                                
+                                <div className="p-6 relative z-10">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-xl font-bold text-white">{room.title}</h3>
+                                                <Badge className={getStatusColor(room.status)}>
+                                                    {room.status}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-sm text-slate-400 line-clamp-1">{room.description || "Challenge your students with this session."}</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <Button size="icon" variant="ghost" onClick={() => handleCopyLink(room.invite_code)} className="h-9 w-9 text-slate-400 hover:text-white hover:bg-white/10">
+                                                <Copy className="w-4 h-4" />
+                                            </Button>
+                                            <Button size="icon" variant="ghost" className="h-9 w-9 text-red-500/50 hover:text-red-500 hover:bg-red-500/10" onClick={() => handleDeleteRoom(room.id)} disabled={isDeleting === room.id}>
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
 
-                                    {/* Details */}
-                                    <div className="md:col-span-2 space-y-2">
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="text-xl font-bold">{room.title}</h3>
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${getStatusColor(room.status)}`}>
-                                                {room.status}
+                                    <div className="grid grid-cols-2 gap-4 mb-6">
+                                        <div className="bg-black/40 rounded-xl p-3 border border-white/5 relative">
+                                            <div className="flex items-center gap-2 text-xs text-slate-500 font-bold uppercase mb-1">
+                                                <Users className="w-3 h-3 text-primary" /> Joined
+                                            </div>
+                                            <p className="text-lg font-black text-white">{room.participants_count || 0} / {room.max_participants}</p>
+                                            
+                                            {room.pending_requests > 0 && (
+                                                <div className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-lg animate-bounce border-2 border-slate-950">
+                                                    {room.pending_requests}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="bg-black/40 rounded-xl p-3 border border-white/5">
+                                            <div className="flex items-center gap-2 text-xs text-slate-500 font-bold uppercase mb-1">
+                                                <Code className="w-3 h-3 text-primary" /> Invite Code
+                                            </div>
+                                            <p className="text-lg font-black text-white font-mono tracking-wider">{room.invite_code}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                                        <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
+                                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> 2h Limit</span>
+                                            <span className={`flex items-center gap-1 ${room.is_battle_test ? 'text-red-400' : 'text-primary'}`}>
+                                                {room.is_battle_test ? <ShieldCheck className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
+                                                {room.is_battle_test ? 'BATTLE MODE' : 'QUIZ MODE'}
                                             </span>
                                         </div>
-                                        <p className="text-muted-foreground text-sm line-clamp-2">
-                                            {room.description || "No description provided."}
-                                        </p>
-                                        <div className="flex items-center gap-2 text-xs font-mono bg-muted/30 px-2 py-1 rounded w-fit">
-                                            <Code className="w-3 h-3" /> Code: {room.invite_code}
-                                        </div>
+                                        <Link href={`/competitions/${room.id}`}>
+                                            <Button size="sm" className="bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold">
+                                                Manage Arena <ChevronRight className="w-4 h-4 ml-1" />
+                                            </Button>
+                                        </Link>
                                     </div>
-
-                                    {/* Meta */}
-                                    <div className="space-y-2 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <Users className="w-4 h-4 text-primary" />
-                                            <span>
-                                                {Array.isArray(room.participants_count) && room.participants_count[0]?.count || 0} / {room.max_participants} joined
-                                            </span>
-                                        </div>
-                                        <div className={`font-bold ${getDifficultyColor(room.difficulty)}`}>
-                                            {room.difficulty}
-                                        </div>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="flex gap-2 justify-end">
-                                        <Button size="icon" variant="ghost" onClick={() => handleCopyLink(room.invite_code)}>
-                                            <Copy className="w-4 h-4" />
-                                        </Button>
-                                        <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            className="text-destructive hover:text-destructive"
-                                            onClick={() => handleDeleteRoom(room.id)}
-                                            disabled={isDeleting === room.id}
-                                        >
-                                            <Trash2 className={`w-4 h-4 ${isDeleting === room.id ? 'opacity-50' : ''}`} />
-                                        </Button>
-                                    </div>
-
                                 </div>
                             </Card>
                         ))
                     )}
                 </div>
-
             </div>
 
-            {/* Modal */}
+            {/* Create Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-                    <Card className="border-border bg-card p-6 w-full max-w-md">
-                        <h2 className="text-xl font-bold mb-6">Create New Room</h2>
-                        <form onSubmit={handleCreateGameRoom} className="space-y-4">
+                <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4 backdrop-blur-md overflow-y-auto">
+                    <Card className="p-8 w-full max-w-2xl my-8 bg-slate-900 border-white/10 shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-purple-500 to-red-500" />
+                        
+                        <div className="flex justify-between items-center mb-8">
                             <div>
-                                <Label htmlFor="title">Room Title</Label>
-                                <Input
-                                    id="title"
-                                    required
-                                    value={formData.title}
-                                    onChange={e => setFormData({ ...formData, title: e.target.value })}
-                                    placeholder="e.g. Weekly DSA Battle"
-                                />
+                                <h2 className="text-2xl font-black text-white">Create New Session</h2>
+                                <p className="text-sm text-slate-400">Configure your competition arena.</p>
                             </div>
-                            <div>
-                                <Label htmlFor="desc">Description</Label>
-                                <Input
-                                    id="desc"
-                                    value={formData.description}
-                                    onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                    placeholder="Optional details"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <Label htmlFor="diff">Difficulty</Label>
-                                    <select
-                                        id="diff"
-                                        className="w-full flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                        value={formData.difficulty}
-                                        onChange={(e: any) => setFormData({ ...formData, difficulty: e.target.value })}
-                                    >
-                                        <option value="BEGINNER">Beginner</option>
-                                        <option value="INTERMEDIATE">Intermediate</option>
-                                        <option value="ADVANCED">Advanced</option>
-                                    </select>
+                            <Button variant="ghost" size="icon" onClick={() => setShowModal(false)} className="text-slate-500 hover:text-white">
+                                <Plus className="w-6 h-6 rotate-45" />
+                            </Button>
+                        </div>
+
+                        <form onSubmit={handleCreateGameRoom} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-4 md:col-span-2">
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Session Title</Label>
+                                        <Input required value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} className="bg-black/40 border-white/10 h-12 text-lg" placeholder="e.g. Advanced Algorithm Challenge" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Description</Label>
+                                        <Input value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="bg-black/40 border-white/10" placeholder="Optional details..." />
+                                    </div>
                                 </div>
-                                <div>
-                                    <Label htmlFor="max">Max Users</Label>
-                                    <Input
-                                        id="max"
-                                        type="number"
-                                        min={1}
-                                        max={500}
-                                        value={formData.maxParticipants}
-                                        onChange={e => setFormData({ ...formData, maxParticipants: parseInt(e.target.value) })}
-                                    />
+                                
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Capacity</Label>
+                                    <Input type="number" value={formData.maxParticipants} onChange={e => setFormData({ ...formData, maxParticipants: parseInt(e.target.value) })} className="bg-black/40 border-white/10" />
+                                </div>
+                                <div className="space-y-2 md:col-span-2">
+                                    <Label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Duration</Label>
+                                    <div className="flex gap-2 p-1 bg-black/40 rounded-xl border border-white/10">
+                                        {[1, 2, 3, 5].map((hours) => (
+                                            <button
+                                                key={hours}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, durationMinutes: hours * 60 })}
+                                                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.durationMinutes === hours * 60 ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                                            >
+                                                {hours} Hours
+                                            </button>
+                                        ))}
+                                        <div className="flex-1 flex items-center px-2 bg-slate-800/50 rounded-lg">
+                                            <Input 
+                                                type="number" 
+                                                placeholder="Custom" 
+                                                className="h-7 bg-transparent border-none text-[10px] p-0 text-center focus:ring-0" 
+                                                onChange={(e) => setFormData({ ...formData, durationMinutes: parseInt(e.target.value) || 0 })}
+                                            />
+                                            <span className="text-[8px] text-slate-500 font-bold ml-1">MINS</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="flex gap-2 justify-end mt-4">
-                                <Button type="button" variant="ghost" onClick={() => setShowModal(false)}>Cancel</Button>
-                                <Button type="submit">Create</Button>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+                                <div 
+                                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer group ${formData.isQuizMode ? 'border-primary bg-primary/10' : 'border-white/5 bg-white/5 hover:border-white/10'}`} 
+                                    onClick={() => setFormData({...formData, isQuizMode: !formData.isQuizMode, isBattleTest: false})}
+                                >
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className={`p-2 rounded-lg ${formData.isQuizMode ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 group-hover:text-white'}`}>
+                                            <Zap className="w-5 h-5" />
+                                        </div>
+                                        <span className="font-bold text-white">Quiz Mode</span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 font-medium leading-relaxed">Structured sequential problems with randomized 2-2-1 distribution.</p>
+                                </div>
+                                
+                                <div 
+                                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer group ${formData.isBattleTest ? 'border-red-600 bg-red-600/10' : 'border-white/5 bg-white/5 hover:border-white/10'}`} 
+                                    onClick={() => setFormData({...formData, isBattleTest: !formData.isBattleTest, isQuizMode: false})}
+                                >
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className={`p-2 rounded-lg ${formData.isBattleTest ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-400 group-hover:text-white'}`}>
+                                            <Sword className="w-5 h-5" />
+                                        </div>
+                                        <span className="font-bold text-white">Battle Arena</span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 font-medium leading-relaxed">Intense competition with 3 Hard problems. Award "Ultimate Warrior" badge.</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4 pt-4">
+                                <div className="flex justify-between items-center">
+                                    <Label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Problem Bank</Label>
+                                    <div className="flex gap-2">
+                                        <Button type="button" variant="outline" size="sm" onClick={handleSelectRandomProblems} className="text-[10px] h-8 bg-white/5 border-white/10 font-black">
+                                            <Zap className="w-3 h-3 mr-1" /> RANDOM QUIZ
+                                        </Button>
+                                        <Button type="button" variant="outline" size="sm" onClick={handleSelectHardThree} className="text-[10px] h-8 bg-white/5 border-white/10 font-black text-red-400 border-red-400/20 hover:bg-red-500/10">
+                                            <Sword className="w-3 h-3 mr-1" /> HARD BATTLE
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="max-h-48 overflow-y-auto border border-white/10 rounded-2xl p-4 space-y-2 bg-black/40 scrollbar-hide">
+                                    {initialProblems.map(p => (
+                                        <div key={p.id} className={`flex items-center gap-4 p-2 rounded-lg transition-colors ${formData.selectedProblems.includes(p.id) ? 'bg-primary/10 border border-primary/20' : 'hover:bg-white/5'}`}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={formData.selectedProblems.includes(p.id)} 
+                                                onChange={() => toggleProblem(p.id)} 
+                                                className="w-4 h-4 rounded border-white/20 bg-slate-800 text-primary" 
+                                            />
+                                            <span className="text-xs font-bold text-white flex-1">{p.title}</span>
+                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded ${p.difficulty === 'EASY' ? 'bg-green-500/10 text-green-400' : p.difficulty === 'MEDIUM' ? 'bg-yellow-500/10 text-yellow-400' : 'bg-red-500/10 text-red-400'}`}>
+                                                {p.difficulty}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex gap-4 justify-end pt-6">
+                                <Button type="button" variant="ghost" onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white">Cancel</Button>
+                                <Button type="submit" className="px-12 bg-primary hover:bg-primary/90 font-bold shadow-lg shadow-primary/20">Create Session</Button>
                             </div>
                         </form>
                     </Card>
                 </div>
             )}
-
         </div>
+    )
+}
+
+function Badge({ children, className }: { children: React.ReactNode, className?: string }) {
+    return (
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight ${className}`}>
+            {children}
+        </span>
+    )
+}
+
+function ChevronRight(props: any) {
+    return (
+        <svg
+            {...props}
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <path d="m9 18 6-6-6-6" />
+        </svg>
     )
 }

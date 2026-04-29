@@ -104,7 +104,7 @@ export default function ProfilePage() {
   } else {
     stats = [
       { label: 'Global Rank', value: `#${profile?.rank_position || 'N/A'}`, icon: Trophy, color: 'text-yellow-500', bg: 'bg-yellow-500/10' },
-      { label: 'Current Streak', value: `${profile?.xp ? Math.floor(profile.xp / 100) : 0} Days`, icon: Flame, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+      { label: 'Current Streak', value: `${profile?.current_streak || 0} Days`, icon: Flame, color: 'text-orange-500', bg: 'bg-orange-500/10' },
       { label: 'Total XP', value: profile?.xp?.toLocaleString() || '0', icon: Zap, color: 'text-blue-500', bg: 'bg-blue-500/10' },
       { label: 'Battles Won', value: profile?.total_wins || '0', icon: Target, color: 'text-green-500', bg: 'bg-green-500/10' },
     ];
@@ -156,16 +156,38 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-4 md:mt-0">
-              <Link href="/settings">
-                <Button variant="outline" className="gap-2">
-                  <Edit2 className="w-4 h-4" />
-                  Edit Profile
+            <div className="flex flex-col gap-3 mt-4 md:mt-0">
+              <div className="flex gap-3">
+                <Link href="/settings">
+                    <Button variant="outline" className="gap-2 border-primary/20 hover:bg-primary/5 transition-all">
+                    <Edit2 className="w-4 h-4" />
+                    Edit Profile
+                    </Button>
+                </Link>
+                <Button variant="ghost" size="icon" className="rounded-xl hover:bg-primary/10">
+                    <Share2 className="w-4 h-4" />
                 </Button>
-              </Link>
-              <Button variant="ghost" size="icon">
-                <Share2 className="w-4 h-4" />
-              </Button>
+              </div>
+              
+              {/* Social Links in Header */}
+              <div className="flex items-center gap-2 mt-2">
+                {[
+                    { icon: Github, value: (profile as any)?.github_username, url: 'https://github.com/' },
+                    { icon: Twitter, value: (profile as any)?.twitter_username, url: 'https://twitter.com/' },
+                    { icon: Linkedin, value: (profile as any)?.linkedin_username, url: 'https://linkedin.com/in/' },
+                    { icon: Globe, value: (profile as any)?.website, url: '' },
+                ].map((social, i) => social.value ? (
+                    <a 
+                        key={i} 
+                        href={social.icon === Globe ? social.value : `${social.url}${social.value}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-2 bg-muted/50 hover:bg-primary/10 text-muted-foreground hover:text-primary rounded-lg transition-all border border-border/50"
+                    >
+                        <social.icon className="w-4 h-4" />
+                    </a>
+                ) : null)}
+              </div>
             </div>
           </motion.div>
 
@@ -203,7 +225,7 @@ export default function ProfilePage() {
               <div className="grid lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
                   {/* Problem Solving Overview - Only for Students or Teachers who code */}
-                  <Card className="border-border/50 bg-card/50">
+                    <Card className="border-border/50 bg-card/50">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <Target className="w-5 h-5 text-primary" />
@@ -216,37 +238,65 @@ export default function ProfilePage() {
                     <CardContent>
                       <div className="flex justify-center py-4">
                         <ProblemDial
-                          easy={profile?.total_battles ? Math.floor(profile.total_battles * 0.4) : 12}
-                          medium={profile?.total_battles ? Math.floor(profile.total_battles * 0.5) : 8}
-                          hard={profile?.total_battles ? Math.floor(profile.total_battles * 0.1) : 3}
-                          total={profile?.total_battles || 23}
+                          easy={profile?.judge_stats?.Easy || 0}
+                          medium={profile?.judge_stats?.Medium || 0}
+                          hard={profile?.judge_stats?.Hard || 0}
+                          total={profile?.judge_stats?.total || 0}
                           size="md"
                         />
                       </div>
                     </CardContent>
                   </Card>
 
-                  {/* Social Links (Dynamic) */}
-                  <div className="grid sm:grid-cols-3 gap-4">
-                    {[
-                      { label: 'GitHub', value: (profile as any)?.github_username, icon: Github, url: 'https://github.com/' },
-                      { label: 'Twitter', value: (profile as any)?.twitter_username, icon: Twitter, url: 'https://twitter.com/' },
-                      { label: 'Website', value: (profile as any)?.website, icon: Globe, url: '' }, // Direct URL
-                    ].map((item, i) => item.value ? (
-                      <a
-                        href={item.label === 'Website' ? item.value : `${item.url}${item.value}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        key={i}
-                        className="flex items-center gap-3 p-4 rounded-xl border border-border/50 bg-card/30 hover:bg-card/60 transition-colors"
-                      >
-                        <item.icon className="w-5 h-5 text-muted-foreground" />
-                        <div className="overflow-hidden">
-                          <p className="text-xs text-muted-foreground font-medium uppercase">{item.label}</p>
-                          <p className="text-sm font-semibold truncate">{item.value}</p>
-                        </div>
-                      </a>
-                    ) : null)}
+                  {/* Latest Submissions Section */}
+                  <Card className="border-border/50 bg-card/50">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-primary" />
+                        Latest Submissions
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {profile?.latest_submissions && profile.latest_submissions.length > 0 ? (
+                          profile.latest_submissions.map((sub: any, i: number) => (
+                            <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/30">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-2 h-2 rounded-full ${sub.verdict === 'Accepted' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                <div>
+                                  <p className="text-sm font-semibold">{sub.question_id?.title || 'Unknown Problem'}</p>
+                                  <p className="text-xs text-muted-foreground">{new Date(sub.createdAt).toLocaleDateString()}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <Badge variant="outline" className="text-[10px]">
+                                  {sub.question_id?.difficulty}
+                                </Badge>
+                                <span className={`text-xs font-mono ${sub.verdict === 'Accepted' ? 'text-green-500' : 'text-red-500'}`}>
+                                  {sub.verdict}
+                                </span>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No submissions yet. Start coding to see your progress!
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Location and member info */}
+                  <div className="flex flex-wrap items-center gap-y-2 gap-x-6 pt-2">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <MapPin className="w-4 h-4" />
+                        <span>Remote</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Calendar className="w-4 h-4" />
+                        <span>Joined {joinDate}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -284,7 +334,7 @@ export default function ProfilePage() {
                   </Card>
 
                   {/* Badges Preview */}
-                  <Card className="border-border/50 bg-gradient-to-br from-card/50 to-primary/5">
+                    <Card className="border-border/50 bg-gradient-to-br from-card/50 to-primary/5">
                     <CardHeader>
                       <CardTitle className="text-lg flex items-center gap-2">
                         <Award className="w-5 h-5 text-yellow-500" />
@@ -293,9 +343,24 @@ export default function ProfilePage() {
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-3 gap-2">
-                        {[1, 2, 3, 4, 5, 6].map((badge) => (
-                          <div key={badge} className="aspect-square rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center grayscale hover:grayscale-0 transition-all cursor-help" title="Badge Locked">
-                            <Trophy className="w-5 h-5 text-accent" />
+                        {[
+                          { id: 1, name: 'First Accepted', icon: Trophy, unlocked: (profile?.judge_stats?.total || 0) > 0, color: 'text-yellow-500' },
+                          { id: 2, name: 'Easy Solver', icon: Zap, unlocked: (profile?.judge_stats?.Easy || 0) >= 5, color: 'text-blue-500' },
+                          { id: 3, name: 'Medium Master', icon: Star, unlocked: (profile?.judge_stats?.Medium || 0) >= 5, color: 'text-purple-500' },
+                          { id: 4, name: 'Hard Hitter', icon: Flame, unlocked: (profile?.judge_stats?.Hard || 0) >= 1, color: 'text-orange-500' },
+                          { id: 5, name: 'Battle Winner', icon: Swords, unlocked: (profile?.total_wins || 0) > 0, color: 'text-green-500' },
+                          { id: 6, name: 'Elite Coder', icon: Award, unlocked: (profile?.xp || 0) >= 1000, color: 'text-red-500' },
+                        ].map((badge) => (
+                          <div 
+                            key={badge.id} 
+                            className={`aspect-square rounded-full flex items-center justify-center transition-all cursor-help border ${
+                              badge.unlocked 
+                                ? `bg-accent/20 border-accent/40 shadow-lg shadow-accent/5` 
+                                : 'bg-muted/10 border-border/30 grayscale opacity-40'
+                            }`}
+                            title={badge.unlocked ? badge.name : `Locked: ${badge.name}`}
+                          >
+                            <badge.icon className={`w-5 h-5 ${badge.unlocked ? badge.color : 'text-muted-foreground'}`} />
                           </div>
                         ))}
                       </div>

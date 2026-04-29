@@ -32,7 +32,7 @@ export default function DashboardPage() {
           ) : null}
 
           {/* Dashboard Content */}
-          <DashboardContent />
+          <DashboardContent profile={profile} loading={loading} />
         </div>
       </main>
     </div>

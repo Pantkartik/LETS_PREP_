@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import Link from 'next/link';
 import { Code, Users, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { getCompetitionByInviteCode, joinCompetition } from '@/lib/actions/join-competition';
 
 export default function JoinCompetitionPage() {
   const [inviteCode, setInviteCode] = useState('');
@@ -15,50 +16,47 @@ export default function JoinCompetitionPage() {
   const handleSearchCompetition = async (e: React.FormEvent) => {
     e.preventDefault();
     setJoinStatus('loading');
+    setErrorMessage('');
 
-    // Simulate API call
-    setTimeout(() => {
-      if (inviteCode.includes('dsc')) {
-        setCompetitionData({
-          name: 'Data Structures Challenge',
-          description: 'Master arrays, linked lists, and trees in this interactive challenge.',
-          difficulty: 'Intermediate',
-          startTime: '2024-01-28T10:00:00',
-          endTime: '2024-01-29T10:00:00',
-          participants: 24,
-          maxParticipants: 50,
-          createdBy: 'Dr. Smith',
-          topics: ['Arrays', 'Linked Lists', 'Trees', 'Hashing'],
-        });
+    // Extract code from link if a URL is pasted
+    let codeToSearch = inviteCode.trim();
+    if (codeToSearch.includes('/join?code=')) {
+        codeToSearch = codeToSearch.split('code=')[1];
+    } else if (codeToSearch.includes('/join/')) {
+        codeToSearch = codeToSearch.split('/join/')[1];
+    }
+
+    const result = await getCompetitionByInviteCode(codeToSearch);
+
+    if (result.success && result.competition) {
+        setCompetitionData(result.competition);
         setJoinStatus('idle');
-      } else if (inviteCode.includes('algo')) {
-        setCompetitionData({
-          name: 'Algorithms Showdown',
-          description: 'Solve complex algorithmic problems and compete with peers.',
-          difficulty: 'Advanced',
-          startTime: '2024-01-30T14:00:00',
-          endTime: '2024-01-31T14:00:00',
-          participants: 18,
-          maxParticipants: 40,
-          createdBy: 'Prof. Johnson',
-          topics: ['Dynamic Programming', 'Graphs', 'Sorting', 'Greedy'],
-        });
-        setJoinStatus('idle');
-      } else {
-        setErrorMessage('Competition not found. Please check your invite code.');
+    } else {
+        setErrorMessage(result.error || 'Competition not found. Please check your invite code.');
         setJoinStatus('error');
-      }
-    }, 1000);
+    }
   };
 
-  const handleJoinCompetition = () => {
+  const handleJoinCompetition = async () => {
     setJoinStatus('loading');
-    setTimeout(() => {
+    
+    if (!competitionData?.id) {
+        setErrorMessage('Invalid competition data');
+        setJoinStatus('error');
+        return;
+    }
+
+    const result = await joinCompetition(competitionData.id);
+
+    if (result.success) {
       setJoinStatus('success');
       setTimeout(() => {
-        window.location.href = '/dashboard';
+        window.location.href = `/competitions/${competitionData.id}`;
       }, 2000);
-    }, 1000);
+    } else {
+      setErrorMessage(result.error || 'Failed to join competition');
+      setJoinStatus('error');
+    }
   };
 
   return (
@@ -90,8 +88,10 @@ export default function JoinCompetitionPage() {
               <Card className="border-border/50 bg-card/50 p-8">
                 <form onSubmit={handleSearchCompetition} className="space-y-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold">Invite Code or Link</label>
+                    <label htmlFor="inviteCode" className="text-sm font-semibold">Invite Code or Link</label>
                     <input
+                      id="inviteCode"
+                      name="inviteCode"
                       type="text"
                       placeholder="e.g., dsc-2024 or https://eduplatform.com/join/dsc-2024"
                       value={inviteCode}
@@ -142,42 +142,45 @@ export default function JoinCompetitionPage() {
           {competitionData && joinStatus !== 'success' && (
             <Card className="border-border/50 bg-card/50 p-8 space-y-6">
               <div className="space-y-4">
-                <h2 className="text-3xl font-bold">{competitionData.name}</h2>
-                <p className="text-muted-foreground text-lg">{competitionData.description}</p>
+                <h2 className="text-3xl font-bold">{competitionData.title}</h2>
+                <p className="text-muted-foreground text-lg">{competitionData.description || 'No description provided.'}</p>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4 border-y border-border/30">
                   <div>
                     <p className="text-xs text-muted-foreground">Difficulty</p>
-                    <p className={`font-semibold mt-1 ${competitionData.difficulty === 'Intermediate' ? 'text-yellow-400' :
-                        competitionData.difficulty === 'Advanced' ? 'text-red-400' : 'text-blue-400'
+                    <p className={`font-semibold mt-1 ${competitionData.difficulty === 'INTERMEDIATE' ? 'text-yellow-400' :
+                        competitionData.difficulty === 'ADVANCED' ? 'text-red-400' : 'text-blue-400'
                       }`}>
-                      {competitionData.difficulty}
+                      {competitionData.difficulty || 'Mixed'}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Participants</p>
-                    <p className="font-semibold mt-1">{competitionData.participants} / {competitionData.maxParticipants}</p>
+                    <p className="font-semibold mt-1">
+                      {Array.isArray(competitionData.participants) ? competitionData.participants[0]?.count || 0 : 0} / {competitionData.max_participants || 50}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Duration</p>
-                    <p className="font-semibold mt-1">24 hours</p>
+                    <p className="font-semibold mt-1">{competitionData.duration_minutes ? `${competitionData.duration_minutes} mins` : 'Flexible'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Created By</p>
-                    <p className="font-semibold mt-1">{competitionData.createdBy}</p>
+                    <p className="font-semibold mt-1">{competitionData.creator?.full_name || competitionData.creator?.username || 'Teacher'}</p>
                   </div>
                 </div>
               </div>
 
               {/* Topics */}
               <div className="space-y-3">
-                <h3 className="font-semibold">Topics Covered</h3>
+                <h3 className="font-semibold">Format</h3>
                 <div className="flex flex-wrap gap-2">
-                  {competitionData.topics.map((topic: string) => (
-                    <span key={topic} className="px-3 py-1 bg-primary/20 text-primary rounded-full text-sm font-medium">
-                      {topic}
-                    </span>
-                  ))}
+                  <span className="px-3 py-1 bg-primary/20 text-primary rounded-full text-sm font-medium">
+                    {competitionData.selected_problems?.length || 0} Problems
+                  </span>
+                  <span className="px-3 py-1 bg-primary/20 text-primary rounded-full text-sm font-medium">
+                    Competitive Coding
+                  </span>
                 </div>
               </div>
 

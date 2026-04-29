@@ -16,6 +16,7 @@ import Link from 'next/link';
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CodeExecutor } from '@/lib/code-executor';
+import { useUserProfile } from '@/lib/hooks/use-user-profile';
 
 // Mock company data
 const COMPANIES = ['Google', 'Amazon', 'Facebook', 'Microsoft', 'Bloomberg', 'Uber'];
@@ -57,6 +58,7 @@ export default function ProblemWorkspace() {
     const [layout, setLayout] = useState<'split' | 'max-editor'>('split');
     const [showCelebration, setShowCelebration] = useState(false);
     const [complexity, setComplexity] = useState<ComplexityAnalysis | null>(null);
+    const { refreshProfile } = useUserProfile();
 
     useEffect(() => {
         if (slug) {
@@ -399,6 +401,10 @@ export default function ProblemWorkspace() {
 
                 // Trigger celebration immediately
                 triggerCelebration();
+                
+                // Refresh profile stats
+                refreshProfile();
+                
                 toast.success('🎉 Solution Accepted!', {
                     description: `Your solution has been accepted! +${xpAmount} XP`
                 });

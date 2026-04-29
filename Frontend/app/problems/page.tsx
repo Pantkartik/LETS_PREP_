@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase-client';
 import { DashboardSidebar } from '@/components/dashboard-sidebar';
 import { Card } from '@/components/ui/card';
@@ -17,39 +17,82 @@ export default function ProblemsPage() {
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
+    const [solvedProblems, setSolvedProblems] = useState<Set<string>>(new Set());
 
-    const supabase = createClient();
+    const supabase = React.useMemo(() => createClient(), []);
 
     useEffect(() => {
         fetchProblems(0, true);
+        fetchSolvedProblems();
     }, []);
 
+    const fetchSolvedProblems = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        try {
+            const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001/api/v1';
+            const subRes = await fetch(`${API_BASE_URL}/judge/submissions/${session.user.id}`);
+            if (subRes.ok) {
+                const submissions = await subRes.json();
+                const solved = new Set(
+                    submissions
+                        .filter((s: any) => s.verdict === 'Accepted')
+                        .map((s: any) => s.question_id?.slug)
+                        .filter(Boolean)
+                );
+                setSolvedProblems(solved as Set<string>);
+            }
+        } catch (err) {
+            console.error('Failed to fetch solved problems:', err);
+        }
+    };
+
+    const fetchRef = React.useRef(false);
+
     const fetchProblems = async (offset: number, isInitial = false) => {
+        if (fetchRef.current && !isInitial) return;
+        fetchRef.current = true;
+
         if (isInitial) setLoading(true);
 
-        let query = supabase
-            .from('problems')
-            .select('*')
-            .range(offset, offset + 19)
-            .order('id', { ascending: true }); // ID sort gives "classic" leetcode feel
+        try {
+            let query = supabase
+                .from('problems')
+                .select('id, title, difficulty, category, points, slug')
+                .range(offset, offset + 19)
+                .order('id', { ascending: true });
 
-        if (searchTerm) {
-            query = query.ilike('title', `%${searchTerm}%`);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error(error);
-        } else {
-            if (data.length < 20) setHasMore(false);
-            if (isInitial) {
-                setProblems(data);
-            } else {
-                setProblems(prev => [...prev, ...data]);
+            if (searchTerm) {
+                query = query.ilike('title', `%${searchTerm}%`);
             }
+
+            const { data, error } = await query;
+
+            if (error) {
+                if (error.message?.includes('aborted')) {
+                    console.log('Fetch aborted - likely transient');
+                } else {
+                    console.error('Supabase fetch error FULL:', JSON.stringify(error, null, 2));
+                }
+            } else if (data) {
+                if (data.length < 20) setHasMore(false);
+                if (isInitial) {
+                    setProblems(data);
+                } else {
+                    setProblems(prev => [...prev, ...data]);
+                }
+            }
+        } catch (err: any) {
+            if (err.name === 'AbortError') {
+                console.log('Request aborted by browser');
+            } else {
+                console.error('Fetch exception:', err);
+            }
+        } finally {
+            setLoading(false);
+            fetchRef.current = false;
         }
-        setLoading(false);
     };
 
     const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -131,13 +174,25 @@ export default function ProblemsPage() {
                                             <div className="group relative bg-[#121212] border border-white/5 hover:border-purple-500/30 p-5 rounded-xl transition-all hover:bg-white/[0.03] flex items-center justify-between cursor-pointer">
 
                                                 <div className="flex items-center gap-6">
-                                                    {/* Status Icon (Mock for now) */}
-                                                    <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-purple-500/10 transition-colors">
-                                                        <Code className="w-4 h-4 text-gray-400 group-hover:text-purple-400" />
+                                                    {/* Status Icon */}
+                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                                                        solvedProblems.has(problem.slug) 
+                                                        ? 'bg-green-500/10 border border-green-500/20' 
+                                                        : 'bg-white/5 border border-white/5 group-hover:bg-purple-500/10'
+                                                    }`}>
+                                                        {solvedProblems.has(problem.slug) ? (
+                                                            <CheckCircle className="w-5 h-5 text-green-500" />
+                                                        ) : (
+                                                            <Code className="w-5 h-5 text-gray-400 group-hover:text-purple-400" />
+                                                        )}
                                                     </div>
 
                                                     <div>
-                                                        <h3 className="text-lg font-medium group-hover:text-purple-400 transition-colors">{problem.title}</h3>
+                                                        <h3 className={`text-lg font-medium transition-colors ${
+                                                            solvedProblems.has(problem.slug) ? 'text-green-400' : 'group-hover:text-purple-400'
+                                                        }`}>
+                                                            {problem.title}
+                                                        </h3>
                                                         <div className="flex items-center gap-3 mt-1">
                                                             <Badge variant="outline" className={`
                                             border-0 uppercase text-[10px] tracking-wider font-bold px-2 py-0.5

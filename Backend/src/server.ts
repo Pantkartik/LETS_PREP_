@@ -22,6 +22,8 @@ import submissionRoutes from './routes/submission.routes';
 import userRoutes from './routes/user.routes';
 import tournamentRoutes from './routes/tournament.routes';
 import executorRoutes from './routes/executor.routes';
+import judgeRoutes from './routes/judge.routes';
+import mongoose from 'mongoose';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
@@ -61,6 +63,10 @@ class Server {
 
     private initializeMiddleware(): void {
         console.log('DEBUG: initializeMiddleware start');
+        this.app.use((req, res, next) => {
+            console.log(`[INCOMING REQUEST] ${req.method} ${req.url}`);
+            next();
+        });
         // Security middleware
         this.app.use(helmet());
 
@@ -116,6 +122,7 @@ class Server {
         this.app.use(`${apiPrefix}/users`, authMiddleware, userRoutes);
         this.app.use(`${apiPrefix}/tournaments`, authMiddleware, tournamentRoutes);
         this.app.use(`${apiPrefix}/executor`, executorRoutes); // Code execution endpoint
+        this.app.use(`${apiPrefix}/judge`, judgeRoutes); // Judge0 system routes
 
         // API documentation
         this.app.get(`${apiPrefix}`, (req, res) => {
@@ -157,6 +164,15 @@ class Server {
             // Initialize Redis
             await RedisService.getInstance().connect();
             logger.info('Redis connected successfully');
+
+            // Initialize MongoDB
+            try {
+                const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/lets_prep_judge';
+                await mongoose.connect(mongoUri);
+                logger.info('MongoDB connected successfully');
+            } catch (mongoError) {
+                logger.error('Failed to connect to MongoDB. Judge system features using MongoDB will be unavailable.', mongoError);
+            }
 
             // Start server
             console.log('DEBUG: Calling listen...');

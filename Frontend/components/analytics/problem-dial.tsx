@@ -10,16 +10,19 @@ interface ProblemDialProps {
     medium: number;
     hard: number;
     total: number;
+    easyAcc?: number;
+    mediumAcc?: number;
+    hardAcc?: number;
     size?: 'sm' | 'md' | 'lg';
 }
 
-export function ProblemDial({ easy, medium, hard, total, size = 'md' }: ProblemDialProps) {
+export function ProblemDial({ easy, medium, hard, total, easyAcc, mediumAcc, hardAcc, size = 'md' }: ProblemDialProps) {
     const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
     const difficultyData = [
-        { name: 'Easy', value: easy, color: '#22c55e', accuracy: 92 }, // Mock accuracy for now
-        { name: 'Medium', value: medium, color: '#eab308', accuracy: 78 },
-        { name: 'Hard', value: hard, color: '#ef4444', accuracy: 64 },
+        { name: 'Easy', value: easy, color: '#22c55e', accuracy: easyAcc || 0 },
+        { name: 'Medium', value: medium, color: '#eab308', accuracy: mediumAcc || 0 },
+        { name: 'Hard', value: hard, color: '#ef4444', accuracy: hardAcc || 0 },
     ];
     // Filter out zero values to avoid rendering issues
     const activeData = difficultyData.filter(d => d.value > 0);

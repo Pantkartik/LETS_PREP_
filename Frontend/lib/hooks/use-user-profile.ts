@@ -28,12 +28,22 @@ export interface UserProfile {
         contests_held: number;
         battles_held: number;
     };
+    judge_stats?: {
+        Easy: number;
+        Medium: number;
+        Hard: number;
+        total: number;
+    };
+    latest_submissions?: any[];
 }
 
 export function useUserProfile() {
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    const refreshProfile = () => setRefreshTrigger(prev => prev + 1);
 
     useEffect(() => {
         async function fetchProfile() {
@@ -189,6 +199,24 @@ export function useUserProfile() {
                         } else if (leaderboardData) {
                             data.rank_position = leaderboardData.rank_position;
                         }
+
+                        // Fetch Judge Stats and Submissions
+                        try {
+                            const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+                            const [statsRes, submissionsRes] = await Promise.all([
+                                fetch(`${API_BASE_URL}/judge/stats/${session.user.id}`),
+                                fetch(`${API_BASE_URL}/judge/submissions/${session.user.id}`)
+                            ]);
+
+                            if (statsRes.ok) {
+                                data.judge_stats = await statsRes.json();
+                            }
+                            if (submissionsRes.ok) {
+                                data.latest_submissions = await submissionsRes.json();
+                            }
+                        } catch (err) {
+                            console.warn('Failed to fetch judge data:', err);
+                        }
                     }
 
                     setProfile(data);
@@ -203,7 +231,7 @@ export function useUserProfile() {
         }
 
         fetchProfile();
-    }, []);
+    }, [refreshTrigger]);
 
-    return { profile, loading, error };
+    return { profile, loading, error, refreshProfile };
 }

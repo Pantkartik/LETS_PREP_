@@ -25,8 +25,15 @@ const myBattles = [
   { id: 1, opponent: 'CodeNinja23', problem: 'Merge Sorted Arrays', result: 'Won', time: '2:34', xpGained: 120, date: '2 hours ago' },
 ];
 
+const competitionTypes = [
+    { id: 'public', label: 'Public Battles' },
+    { id: 'teacher', label: 'Class Competitions' }
+];
+
 export default function BattlesPage() {
   const [activeBattles, setActiveBattles] = useState<any[]>([]);
+  const [teacherCompetitions, setTeacherCompetitions] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState('public');
   const [loading, setLoading] = useState(true);
   const [joinCode, setJoinCode] = useState('');
   const router = useRouter();
@@ -34,12 +41,16 @@ export default function BattlesPage() {
 
   useEffect(() => {
     fetchBattles();
+    fetchTeacherCompetitions();
 
-    // Subscribe to changes in battles (e.g. new rooms, status changes)
+    // Subscribe to changes
     const channel = supabase
       .channel('public:battles')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'battles' }, () => {
         fetchBattles();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competitions' }, () => {
+        fetchTeacherCompetitions();
       })
       .subscribe();
 
@@ -47,6 +58,25 @@ export default function BattlesPage() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const fetchTeacherCompetitions = async () => {
+    try {
+        const { data, error } = await supabase
+            .from('competitions')
+            .select(`
+                *,
+                creator:profiles!creator_id(username, full_name),
+                participants:competition_participants(count)
+            `)
+            .eq('status', 'ACTIVE')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setTeacherCompetitions(data || []);
+    } catch (error) {
+        console.error('Error fetching teacher competitions:', error);
+    }
+  };
 
   const fetchBattles = async () => {
     try {
@@ -200,65 +230,121 @@ export default function BattlesPage() {
                 </div>
               </div>
 
-              {loading ? (
-                <div>Loading active battles...</div>
-              ) : activeBattles.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground">No public battles active right now. Join by code or create one!</div>
-              ) : (
-                <div className="grid gap-4">
-                  {activeBattles.map((battle) => (
-                    <Card
-                      key={battle.id}
-                      className="border-border/50 bg-card/50 p-6 hover:bg-card/80 transition-colors"
+              <div className="flex gap-2 mb-6">
+                {competitionTypes.map(t => (
+                    <Button 
+                        key={t.id}
+                        variant={activeTab === t.id ? 'default' : 'outline'}
+                        onClick={() => setActiveTab(t.id)}
+                        className="rounded-full px-6"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-3">
-                            <h3 className="font-bold text-lg">{battle.title}</h3>
-                            <Badge
-                              className={
-                                battle.difficulty === 'EASY'
-                                  ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                                  : battle.difficulty === 'MEDIUM'
-                                    ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
-                                    : 'bg-red-500/20 text-red-400 border-red-500/30'
-                              }
-                            >
-                              {battle.difficulty}
-                            </Badge>
-                            <Badge variant="outline" className="border-border/50">
-                              <Users className="w-3 h-3 mr-1" />
-                              {/* Show real current_players and max_players */}
-                              {battle.current_players || 0} / {battle.max_players}
-                            </Badge>
-                            {battle.battle_type !== 'PUBLIC' && <Badge variant="secondary">PRIVATE</Badge>}
+                        {t.label}
+                    </Button>
+                ))}
+              </div>
+
+              {loading ? (
+                <div>Loading...</div>
+              ) : activeTab === 'public' ? (
+                activeBattles.length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground">No public battles active right now. Join by code or create one!</div>
+                ) : (
+                  <div className="grid gap-4">
+                    {activeBattles.map((battle) => (
+                      <Card
+                        key={battle.id}
+                        className="border-border/50 bg-card/50 p-6 hover:bg-card/80 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-3">
+                              <h3 className="font-bold text-lg">{battle.title}</h3>
+                              <Badge
+                                className={
+                                  battle.difficulty === 'EASY'
+                                    ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                                    : battle.difficulty === 'MEDIUM'
+                                      ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+                                      : 'bg-red-500/20 text-red-400 border-red-500/30'
+                                }
+                              >
+                                {battle.difficulty}
+                              </Badge>
+                              <Badge variant="outline" className="border-border/50">
+                                <Users className="w-3 h-3 mr-1" />
+                                {battle.current_players || 0} / {battle.max_players}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <span className="font-mono bg-muted px-1 rounded text-xs">{battle.room_code}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Clock className="w-4 h-4" />
+                                Waiting for players...
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <span className="font-mono bg-muted px-1 rounded text-xs">{battle.room_code}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-4 h-4" />
-                              Waiting for players...
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs">Hosted by {(battle as any).profiles?.full_name || 'Unknown'}</span>
-                            </div>
-                          </div>
+                          <Button
+                            className="bg-primary hover:bg-primary/90 gap-2"
+                            onClick={() => joinBattle(battle.id)}
+                            disabled={(battle.current_players || 0) >= battle.max_players}
+                          >
+                            <Play className="w-4 h-4" />
+                            {(battle.current_players || 0) >= battle.max_players ? 'Full' : 'Join Battle'}
+                          </Button>
                         </div>
-                        {/* Join Button - Disable if full */}
-                        <Button
-                          className="bg-primary hover:bg-primary/90 gap-2"
-                          onClick={() => joinBattle(battle.id)}
-                          disabled={(battle.current_players || 0) >= battle.max_players}
-                        >
-                          <Play className="w-4 h-4" />
-                          {(battle.current_players || 0) >= battle.max_players ? 'Full' : 'Join Battle'}
-                        </Button>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+                      </Card>
+                    ))}
+                  </div>
+                )
+              ) : (
+                teacherCompetitions.length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground">No class competitions active right now.</div>
+                ) : (
+                  <div className="grid gap-4">
+                    {teacherCompetitions.map((comp) => (
+                      <Card
+                        key={comp.id}
+                        className="border-border/50 bg-card/50 p-6 hover:bg-card/80 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-3">
+                              <h3 className="font-bold text-lg">{comp.title}</h3>
+                              <Badge className="bg-primary/20 text-primary border-primary/30">
+                                {comp.difficulty || 'MIXED'}
+                              </Badge>
+                              <Badge variant="outline" className="border-border/50">
+                                <Users className="w-3 h-3 mr-1" />
+                                {Array.isArray(comp.participants) ? comp.participants[0]?.count || 0 : 0} joined
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-1 font-mono">
+                                <span>Code: {comp.invite_code}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Clock className="w-4 h-4" />
+                                {comp.duration_minutes} mins
+                              </div>
+                              <div className="text-xs">
+                                By {comp.creator?.full_name || comp.creator?.username || 'Teacher'}
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            className="bg-accent hover:bg-accent/90 gap-2"
+                            onClick={() => router.push(`/join?code=${comp.invite_code}`)}
+                          >
+                            <LogIn className="w-4 h-4" />
+                            Join Competition
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )
               )}
             </TabsContent>
 

@@ -4,7 +4,14 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSupabaseAuth } from '@/components/supabase-auth-provider';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { 
+  Sheet, 
+  SheetContent, 
+  SheetTrigger, 
+  SheetHeader, 
+  SheetTitle, 
+  SheetDescription 
+} from '@/components/ui/sheet';
 import {
   Home,
   Zap,
@@ -224,7 +231,7 @@ const DashboardSidebarComponent = () => {
   const navItems = role === 'TEACHER' ? [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/teacher-dashboard' },
     { label: 'Classes', icon: Users, href: '/classes' },
-    { label: 'Competitions', icon: Trophy, href: '/teacher-competitions' },
+    { label: 'Competitions', icon: Trophy, href: '/teacher/competitions' },
     { label: 'Assignments', icon: Code, href: '/assignments' },
     { label: 'Analytics', icon: BarChart3, href: '/analytics' },
     { label: 'Settings', icon: Settings, href: '/settings' },
@@ -266,6 +273,10 @@ const DashboardSidebarComponent = () => {
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="p-0 w-72 bg-card/95 backdrop-blur-xl border-r border-border/50">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Navigation Menu</SheetTitle>
+              <SheetDescription>Access different sections of the platform</SheetDescription>
+            </SheetHeader>
             <SidebarContent
               navItems={navItems}
               pathname={pathname}

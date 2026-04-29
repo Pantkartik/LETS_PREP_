@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Clock, Award, CheckCircle2, Circle } from 'lucide-react';
+import { QuizArena } from '@/components/competitions/quiz-arena';
 
 interface SolvePageProps {
     params: {
@@ -67,6 +68,18 @@ export default async function SolvePage({ params }: SolvePageProps) {
         .eq('status', 'ACCEPTED');
 
     const solvedProblemIds = new Set(submissions?.map(s => s.problem_id) || []);
+
+    if (competition.is_quiz_mode) {
+        return (
+            <div className="min-h-screen bg-[#0a0a0a] text-white p-8">
+                <QuizArena 
+                    competition={competition} 
+                    problems={problems} 
+                    solvedProblemIds={solvedProblemIds} 
+                />
+            </div>
+        );
+    }
 
     const getDifficultyColor = (difficulty: string) => {
         switch (difficulty) {
@@ -166,3 +179,4 @@ export default async function SolvePage({ params }: SolvePageProps) {
         </div>
     );
 }
+

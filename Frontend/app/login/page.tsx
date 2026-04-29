@@ -450,6 +450,7 @@ export default function LoginPage() {
                 <Mail className={`absolute left-3 top-3 h-4 w-4 transition-colors ${focusedField === 'email' ? 'text-primary' : 'text-gray-500'}`} />
                 <Input
                   id="email"
+                  name="email"
                   type="email"
                   placeholder="hello@example.com"
                   className="bg-white/5 border-white/10 pl-10 focus:border-primary/50 transition-all h-10 focus:bg-white/10 focus:shadow-[0_0_15px_rgba(var(--primary),0.2)]"
@@ -474,6 +475,7 @@ export default function LoginPage() {
                 <Lock className={`absolute left-3 top-3 h-4 w-4 transition-colors ${focusedField === 'password' ? 'text-primary' : 'text-gray-500'}`} />
                 <Input
                   id="password"
+                  name="password"
                   type="password"
                   placeholder="••••••••"
                   className="bg-white/5 border-white/10 pl-10 focus:border-primary/50 transition-all h-10 focus:bg-white/10 focus:shadow-[0_0_15px_rgba(var(--primary),0.2)]"

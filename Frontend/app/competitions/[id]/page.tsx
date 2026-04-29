@@ -3,12 +3,13 @@ import { createClient } from '@/lib/supabase-server';
 import { CompetitionView } from '@/components/competitions/competition-view';
 
 interface CompetitionPageProps {
-    params: {
+    params: Promise<{
         id: string;
-    };
+    }>;
 }
 
 export default async function CompetitionPage({ params }: CompetitionPageProps) {
+    const { id } = await params;
     const supabase = await createClient();
 
     // Get current user
@@ -39,7 +40,7 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
                 id,
                 user_id,
                 score,
-                rank,
+                rank_position,
                 problems_solved,
                 profile:profiles(
                     id,
@@ -49,15 +50,16 @@ export default async function CompetitionPage({ params }: CompetitionPageProps) 
                 )
             )
         `)
-        .eq('id', params.id)
+        .eq('id', id)
         .single();
 
     if (error || !competition) {
         redirect('/dashboard');
     }
 
-    // Check if user is teacher of this classroom
-    const isTeacher = profile?.role === 'teacher' && competition.classroom.teacher_id === user.id;
+    // Check if user is teacher of this classroom or creator of competition
+    const isTeacher = profile?.role?.toUpperCase() === 'TEACHER' && 
+        (competition.creator_id === user.id || competition.classroom?.teacher_id === user.id);
 
     // Check if user is participant
     const isParticipant = competition.participants?.some((p: any) => p.user_id === user.id);

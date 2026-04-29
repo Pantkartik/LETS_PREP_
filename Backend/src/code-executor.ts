@@ -1,45 +1,22 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
-import Docker from 'dockerode';
-import { v4 as uuidv4 } from 'uuid';
-import fs from 'fs/promises';
-import path from 'path';
+import axios from 'axios';
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-const docker = new Docker();
 const supabase = createClient(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Language configurations
-const LANGUAGE_CONFIG = {
-    python: {
-        image: 'python:3.11-slim',
-        extension: '.py',
-        compile: null,
-        execute: (filename: string) => ['python3', filename]
-    },
-    javascript: {
-        image: 'node:18-slim',
-        extension: '.js',
-        compile: null,
-        execute: (filename: string) => ['node', filename]
-    },
-    cpp: {
-        image: 'gcc:latest',
-        extension: '.cpp',
-        compile: (filename: string) => ['g++', '-std=c++17', '-O2', filename, '-o', 'program'],
-        execute: () => ['./program']
-    },
-    java: {
-        image: 'openjdk:17-slim',
-        extension: '.java',
-        compile: (filename: string) => ['javac', filename],
-        execute: (className: string) => ['java', className]
-    }
+const JUDGE0_URL = process.env.JUDGE0_URL || 'https://ce.judge0.com';
+
+const LANGUAGE_IDS: Record<string, number> = {
+    python: 71,
+    javascript: 93,
+    cpp: 54,
+    java: 91
 };
 
 interface TestCase {
@@ -63,74 +40,48 @@ async function executeCode(
     timeLimit: number = 2000,
     memoryLimit: number = 256
 ): Promise<ExecutionResult> {
-    const config = LANGUAGE_CONFIG[language as keyof typeof LANGUAGE_CONFIG];
-    if (!config) {
+    const languageId = LANGUAGE_IDS[language];
+    if (!languageId) {
         throw new Error(`Unsupported language: ${language}`);
     }
 
-    const workDir = `/tmp/code_exec_${uuidv4()}`;
-    await fs.mkdir(workDir, { recursive: true });
+    let passedTests = 0;
+    let totalTime = 0;
+    let maxMemory = 0;
 
-    try {
-        // Determine filename
-        let filename = `Solution${config.extension}`;
-        if (language === 'java') {
-            const classMatch = code.match(/public\s+class\s+(\w+)/);
-            if (classMatch) {
-                filename = `${classMatch[1]}${config.extension}`;
-            }
-        }
+    for (const testCase of testCases) {
+        try {
+            const response = await axios.post(`${JUDGE0_URL}/submissions?base64_encoded=false&wait=true`, {
+                source_code: code,
+                language_id: languageId,
+                stdin: testCase.input,
+                expected_output: testCase.expected_output,
+                cpu_time_limit: timeLimit / 1000,
+                memory_limit: memoryLimit * 1024,
+            });
 
-        const filePath = path.join(workDir, filename);
-        await fs.writeFile(filePath, code);
+            const data = response.data;
+            const statusId = data.status.id;
 
-        // Compilation step (if needed)
-        if (config.compile) {
-            const compileCmd = config.compile(filename);
-            const compileResult = await runInDocker(
-                config.image,
-                workDir,
-                compileCmd,
-                '',
-                30000, // 30 seconds for compilation
-                memoryLimit
-            );
+            // Update stats
+            if (data.time) totalTime += parseFloat(data.time) * 1000;
+            if (data.memory) maxMemory = Math.max(maxMemory, data.memory / 1024);
 
-            if (compileResult.exitCode !== 0) {
+            if (statusId === 3) {
+                // Accepted
+                passedTests++;
+            } else if (statusId === 4) {
+                // Wrong Answer
                 return {
-                    status: 'COMPILATION_ERROR',
-                    testCasesPassed: 0,
+                    status: 'WRONG_ANSWER',
+                    testCasesPassed: passedTests,
                     totalTestCases: testCases.length,
-                    executionTime: 0,
-                    memoryUsed: 0,
-                    errorMessage: compileResult.stderr
+                    executionTime: totalTime,
+                    memoryUsed: maxMemory,
+                    errorMessage: `Expected: ${testCase.expected_output.trim()}\nGot: ${data.stdout ? data.stdout.trim() : ''}`
                 };
-            }
-        }
-
-        // Execute test cases
-        let passedTests = 0;
-        let totalTime = 0;
-        let maxMemory = 0;
-
-        for (const testCase of testCases) {
-            const executeCmd = config.execute(language === 'java' ? filename.replace('.java', '') : filename);
-
-            const startTime = Date.now();
-            const result = await runInDocker(
-                config.image,
-                workDir,
-                executeCmd,
-                testCase.input,
-                timeLimit,
-                memoryLimit
-            );
-            const endTime = Date.now();
-
-            totalTime += (endTime - startTime);
-            maxMemory = Math.max(maxMemory, result.memoryUsed);
-
-            if (result.timeout) {
+            } else if (statusId === 5) {
+                // Time Limit Exceeded
                 return {
                     status: 'TIME_LIMIT_EXCEEDED',
                     testCasesPassed: passedTests,
@@ -139,144 +90,40 @@ async function executeCode(
                     memoryUsed: maxMemory,
                     errorMessage: 'Time limit exceeded'
                 };
-            }
-
-            if (result.exitCode !== 0) {
+            } else if (statusId === 6) {
+                // Compilation Error
+                return {
+                    status: 'COMPILATION_ERROR',
+                    testCasesPassed: 0,
+                    totalTestCases: testCases.length,
+                    executionTime: 0,
+                    memoryUsed: 0,
+                    errorMessage: data.compile_output
+                };
+            } else {
+                // Runtime Error or others
                 return {
                     status: 'RUNTIME_ERROR',
                     testCasesPassed: passedTests,
                     totalTestCases: testCases.length,
                     executionTime: totalTime,
                     memoryUsed: maxMemory,
-                    errorMessage: result.stderr
+                    errorMessage: data.stderr || data.message || 'Runtime Error'
                 };
             }
-
-            // Compare output (trim whitespace)
-            const actualOutput = result.stdout.trim();
-            const expectedOutput = testCase.expected_output.trim();
-
-            if (actualOutput === expectedOutput) {
-                passedTests++;
-            } else {
-                return {
-                    status: 'WRONG_ANSWER',
-                    testCasesPassed: passedTests,
-                    totalTestCases: testCases.length,
-                    executionTime: totalTime,
-                    memoryUsed: maxMemory,
-                    errorMessage: `Expected: ${expectedOutput}\nGot: ${actualOutput}`
-                };
-            }
+        } catch (error: any) {
+            console.error('Judge0 API error:', error.response?.data || error.message);
+            throw new Error('Code execution service unavailable');
         }
-
-        return {
-            status: 'ACCEPTED',
-            testCasesPassed: passedTests,
-            totalTestCases: testCases.length,
-            executionTime: totalTime,
-            memoryUsed: maxMemory
-        };
-
-    } finally {
-        // Cleanup
-        await fs.rm(workDir, { recursive: true, force: true });
     }
-}
 
-async function runInDocker(
-    image: string,
-    workDir: string,
-    cmd: string[],
-    stdin: string,
-    timeout: number,
-    memoryLimit: number
-): Promise<{
-    stdout: string;
-    stderr: string;
-    exitCode: number;
-    timeout: boolean;
-    memoryUsed: number;
-}> {
-    return new Promise(async (resolve) => {
-        let timedOut = false;
-        let stdout = '';
-        let stderr = '';
-
-        const container = await docker.createContainer({
-            Image: image,
-            Cmd: cmd,
-            WorkingDir: '/workspace',
-            HostConfig: {
-                Binds: [`${workDir}:/workspace`],
-                Memory: memoryLimit * 1024 * 1024, // Convert MB to bytes
-                NetworkMode: 'none', // No network access
-                AutoRemove: true
-            },
-            OpenStdin: true,
-            StdinOnce: true
-        });
-
-        const timeoutId = setTimeout(async () => {
-            timedOut = true;
-            try {
-                await container.kill();
-            } catch (e) {
-                // Container might already be stopped
-            }
-        }, timeout);
-
-        try {
-            await container.start();
-
-            // Send stdin if provided
-            if (stdin) {
-                const stream = await container.attach({
-                    stream: true,
-                    stdin: true,
-                    stdout: true,
-                    stderr: true
-                });
-
-                stream.write(stdin);
-                stream.end();
-
-                stream.on('data', (chunk: Buffer) => {
-                    const str = chunk.toString();
-                    if (str.includes('stdout')) {
-                        stdout += str;
-                    } else {
-                        stderr += str;
-                    }
-                });
-            }
-
-            const result = await container.wait();
-            clearTimeout(timeoutId);
-
-            // Get stats for memory usage
-            const stats = await container.stats({ stream: false });
-            const memoryUsed = Math.round((stats.memory_stats?.usage || 0) / 1024); // Convert to KB
-
-            resolve({
-                stdout: stdout.trim(),
-                stderr: stderr.trim(),
-                exitCode: result.StatusCode,
-                timeout: timedOut,
-                memoryUsed
-            });
-
-        } catch (error) {
-            clearTimeout(timeoutId);
-            resolve({
-                stdout: '',
-                stderr: error instanceof Error ? error.message : 'Unknown error',
-                exitCode: 1,
-                timeout: timedOut,
-                memoryUsed: 0
-            });
-        }
-    });
+    return {
+        status: 'ACCEPTED',
+        testCasesPassed: passedTests,
+        totalTestCases: testCases.length,
+        executionTime: totalTime,
+        memoryUsed: maxMemory
+    };
 }
 
 // API endpoint to process submissions

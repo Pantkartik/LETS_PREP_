@@ -3,9 +3,19 @@
 import { createClient } from '@/lib/supabase-server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+let _openai: OpenAI | null = null;
+
+function getOpenAI() {
+    if (!_openai) {
+        if (!process.env.OPENAI_API_KEY) {
+            console.warn("OPENAI_API_KEY is not set. AI features will fallback to mock data.");
+        }
+        _openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY || 'dummy-key',
+        });
+    }
+    return _openai;
+}
 
 export async function startInterview(type: string, difficulty: string, focusArea: string) {
     const supabase = await createClient();
@@ -67,6 +77,7 @@ export async function generateQuestion(interviewId: string, previousQuestions: a
     }
 
     try {
+        const openai = getOpenAI();
         const response = await openai.chat.completions.create({
             model: 'gpt-4o',
             messages: [{ role: 'system', content: prompt }],
@@ -106,6 +117,7 @@ export async function submitAnswer(interviewId: string, question: string, answer
 
     let analysis;
     try {
+        const openai = getOpenAI();
         const response = await openai.chat.completions.create({
             model: 'gpt-4o',
             messages: [{ role: 'system', content: analysisPrompt }],

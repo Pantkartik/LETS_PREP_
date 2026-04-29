@@ -1,6 +1,6 @@
 'use server'
 
-import { requireTeacher } from './utils'
+import { requireTeacher, requireUser } from './utils'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
@@ -10,10 +10,185 @@ const CreateCompetitionSchema = z.object({
     classroomId: z.string().uuid(),
     title: z.string().min(3, 'Competition title must be at least 3 characters'),
     description: z.string().optional(),
-    selectedProblems: z.array(z.string().uuid()).min(4).max(4, 'Must select exactly 4 problems'),
+    selectedProblems: z.array(z.string().uuid()).optional(),
     durationMinutes: z.number().min(30).max(480).default(120),
     maxParticipants: z.number().min(1).max(500).default(100),
+    isQuizMode: z.boolean().default(false),
+    isBattleTest: z.boolean().default(false),
 })
+
+// ... existing actions ...
+
+/**
+ * Student requests to join a competition
+ */
+export async function requestToJoinCompetition(competitionId: string) {
+    try {
+        const { supabase, user } = await requireUser();
+
+        // Check if entries are locked
+        const { data: competition } = await supabase
+            .from('competitions')
+            .select('is_entry_locked')
+            .eq('id', competitionId)
+            .single();
+        
+        if (competition?.is_entry_locked) {
+            throw new Error('Entries are locked for this competition');
+        }
+
+        // Check if already a participant
+        const { data: existing } = await supabase
+            .from('competition_participants')
+            .select('status')
+            .eq('competition_id', competitionId)
+            .eq('user_id', user.id)
+            .single();
+
+        if (existing) {
+            return { success: true, alreadyJoined: true };
+        }
+
+        // Insert as PENDING participant
+        const { error } = await supabase
+            .from('competition_participants')
+            .insert({
+                competition_id: competitionId,
+                user_id: user.id,
+                status: 'PENDING'
+            });
+
+        if (error) throw error;
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error requesting to join:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Teacher approves a participant
+ */
+export async function approveParticipant(competitionId: string, userId: string) {
+    try {
+        const { supabase } = await requireTeacher();
+        const { error } = await supabase
+            .from('competition_participants')
+            .update({ status: 'ACCEPTED' })
+            .eq('competition_id', competitionId)
+            .eq('user_id', userId);
+
+        if (error) throw error;
+        revalidatePath(`/competitions/${competitionId}`);
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Teacher rejects/removes a participant
+ */
+export async function rejectParticipant(competitionId: string, userId: string) {
+    try {
+        const { supabase } = await requireTeacher();
+        const { error } = await supabase
+            .from('competition_participants')
+            .delete()
+            .eq('competition_id', competitionId)
+            .eq('user_id', userId);
+
+        if (error) throw error;
+        revalidatePath(`/competitions/${competitionId}`);
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Teacher bans a participant
+ */
+export async function banParticipant(competitionId: string, userId: string) {
+    try {
+        const { supabase } = await requireTeacher();
+        const { error } = await supabase
+            .from('competition_participants')
+            .update({ status: 'BANNED' })
+            .eq('competition_id', competitionId)
+            .eq('user_id', userId);
+
+        if (error) throw error;
+        revalidatePath(`/competitions/${competitionId}`);
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Teacher locks entries
+ */
+export async function lockCompetitionEntries(competitionId: string) {
+    try {
+        const { supabase } = await requireTeacher();
+        const { error } = await supabase
+            .from('competitions')
+            .update({ is_entry_locked: true })
+            .eq('id', competitionId);
+
+        if (error) throw error;
+        revalidatePath(`/competitions/${competitionId}`);
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Teacher starts the quiz session (randomizes problems and starts timer)
+ */
+export async function startQuizSession(competitionId: string) {
+    try {
+        const { supabase } = await requireTeacher();
+        
+        // Fetch random questions (2-2-1)
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+        const response = await fetch(`${API_URL}/judge/random?type=quiz`, {
+            cache: 'no-store'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch random problems: ${response.statusText}`);
+        }
+
+        const problems = await response.json();
+        
+        if (!Array.isArray(problems) || problems.length === 0) {
+            throw new Error('No problems were returned from the problem bank');
+        }
+        
+        const problemIds = problems.map((p: any) => p.id || p._id);
+
+        const { error } = await supabase
+            .from('competitions')
+            .update({
+                status: 'ACTIVE',
+                is_active: true,
+                started_at: new Date().toISOString(),
+                selected_problems: problemIds,
+                quiz_started: true
+            })
+            .eq('id', competitionId);
+
+        if (error) throw error;
+        revalidatePath(`/competitions/${competitionId}`);
+        return { success: true };
+    } catch (error: any) {
+        console.error('startQuizSession Error:', error);
+        return { success: false, error: error.message || 'Failed to start session' };
+    }
+}
 
 // --- Actions ---
 
@@ -73,13 +248,15 @@ export async function createCompetition(data: z.infer<typeof CreateCompetitionSc
                 classroom_id: validated.classroomId,
                 creator_id: user.id,
                 invite_code: inviteCode,
-                selected_problems: validated.selectedProblems,
+                selected_problems: validated.selectedProblems || [],
                 duration_minutes: validated.durationMinutes,
                 max_participants: validated.maxParticipants,
                 penalty_per_wrong: 10,
                 max_rank_display: 3,
                 status: 'DRAFT',
-                is_active: false
+                is_active: false,
+                is_quiz_mode: validated.isQuizMode,
+                is_battle_test: validated.isBattleTest
             })
             .select()
             .single()
@@ -285,22 +462,39 @@ export async function getClassroomCompetitions(classroomId: string) {
 export async function getTeacherGameRooms() {
     try {
         const { supabase, user } = await requireTeacher()
+        
+        console.log('Fetching rooms for teacher:', user.id)
 
         const { data: competitions, error } = await supabase
             .from('competitions')
             .select(`
-                *,
-                participants:competition_participants(count)
+                *
             `)
             .eq('creator_id', user.id)
             .order('created_at', { ascending: false })
-            .limit(10)
 
-        if (error) throw error
+        if (error) {
+            console.error('Supabase error fetching rooms:', error)
+            throw error
+        }
+
+        const { data: allParticipants } = await supabase
+            .from('competition_participants')
+            .select('competition_id, status')
+            .in('competition_id', (competitions || []).map(c => c.id))
+
+        const formattedRooms = (competitions || []).map(room => {
+            const roomParticipants = allParticipants?.filter(p => p.competition_id === room.id) || []
+            return {
+                ...room,
+                participants_count: roomParticipants.filter(p => p.status === 'ACCEPTED' || !p.status).length,
+                pending_requests: roomParticipants.filter(p => p.status === 'PENDING').length
+            }
+        })
 
         return {
             success: true,
-            rooms: competitions || []
+            rooms: formattedRooms
         }
 
     } catch (error: any) {
@@ -340,7 +534,49 @@ export async function getTeacherBattles() {
     }
 }
 
-export async function createGameRoom(data: any) {
-    // Stub to fix build error and allow UI to compile
-    return { success: true, room: { ...data, id: 'stub-id', invite_code: 'STUB', status: 'ACTIVE' } }
+export async function createGameRoom(data: {
+    title: string;
+    description?: string;
+    difficulty: string;
+    maxParticipants: number;
+    durationMinutes: number;
+    selectedProblems: string[];
+    isQuizMode?: boolean;
+    isBattleTest?: boolean;
+}) {
+    try {
+        const { supabase, user } = await requireTeacher()
+
+        const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase()
+
+        const { data: competition, error } = await supabase
+            .from('competitions')
+            .insert({
+                title: data.title,
+                description: data.description || null,
+                difficulty: data.difficulty,
+                creator_id: user.id,
+                invite_code: inviteCode,
+                selected_problems: data.selectedProblems,
+                duration_minutes: data.durationMinutes,
+                max_participants: data.maxParticipants,
+                penalty_per_wrong: 10,
+                max_rank_display: 3,
+                status: 'DRAFT',
+                is_active: false,
+                is_quiz_mode: data.isQuizMode || false,
+                is_battle_test: data.isBattleTest || false
+            })
+            .select()
+            .single()
+
+        if (error) throw error
+
+        revalidatePath('/teacher/competitions')
+        return { success: true, room: competition }
+
+    } catch (error: any) {
+        console.error('Error creating game room:', error)
+        return { success: false, error: error.message }
+    }
 }
