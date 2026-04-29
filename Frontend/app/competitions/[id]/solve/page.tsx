@@ -8,12 +8,13 @@ import { ArrowLeft, Clock, Award, CheckCircle2, Circle } from 'lucide-react';
 import { QuizArena } from '@/components/competitions/quiz-arena';
 
 interface SolvePageProps {
-    params: {
+    params: Promise<{
         id: string;
-    };
+    }>;
 }
 
 export default async function SolvePage({ params }: SolvePageProps) {
+    const { id } = await params;
     const supabase = await createClient();
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -29,7 +30,7 @@ export default async function SolvePage({ params }: SolvePageProps) {
             *,
             classroom:classrooms(name)
         `)
-        .eq('id', params.id)
+        .eq('id', id)
         .single();
 
     if (error || !competition) {
@@ -37,7 +38,7 @@ export default async function SolvePage({ params }: SolvePageProps) {
     }
 
     if (competition.status !== 'ACTIVE') {
-        redirect(`/competitions/${params.id}`);
+        redirect(`/competitions/${id}`);
     }
 
     // Fetch selected problems details
