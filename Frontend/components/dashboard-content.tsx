@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -37,20 +37,31 @@ interface DashboardContentProps {
 
 export function DashboardContent({ profile, loading: profileLoading }: DashboardContentProps) {
   const [analyticsData, setAnalyticsData] = useState<any>(null);
-  const [loadingAnalytics, setLoadingAnalytics] = useState(true);
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     async function fetchAnalytics() {
         try {
-            const supabase = createClient();
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
             const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-            const res = await fetch(`${API_BASE_URL}/judge/performance/${session.user.id}`);
-            if (res.ok) {
-                const data = await res.json();
-                setAnalyticsData(data);
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/judge/performance/${session.user.id}`, {
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    setAnalyticsData(data);
+                }
+            } catch (fetchErr) {
+                console.error('Fetch analytics aborted or failed:', fetchErr);
             }
         } catch (err) {
             console.error('Failed to fetch analytics:', err);

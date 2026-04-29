@@ -154,15 +154,22 @@ export async function startQuizSession(competitionId: string) {
         
         // Fetch random questions (2-2-1)
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-        const response = await fetch(`${API_URL}/judge/random?type=quiz`, {
-            cache: 'no-store'
-        });
         
-        if (!response.ok) {
-            throw new Error(`Failed to fetch random problems: ${response.statusText}`);
-        }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-        const problems = await response.json();
+        try {
+            const response = await fetch(`${API_URL}/judge/random?type=quiz`, {
+                cache: 'no-store',
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch random problems: ${response.statusText}`);
+            }
+
+            const problems = await response.json();
         
         if (!Array.isArray(problems) || problems.length === 0) {
             throw new Error('No problems were returned from the problem bank');
