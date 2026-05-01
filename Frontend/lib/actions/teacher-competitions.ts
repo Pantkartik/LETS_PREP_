@@ -158,7 +158,6 @@ export async function startQuizSession(competitionId: string) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-        try {
             const response = await fetch(`${API_URL}/judge/random?type=quiz`, {
                 cache: 'no-store',
                 signal: controller.signal
@@ -171,26 +170,26 @@ export async function startQuizSession(competitionId: string) {
 
             const problems = await response.json();
         
-        if (!Array.isArray(problems) || problems.length === 0) {
-            throw new Error('No problems were returned from the problem bank');
-        }
+            if (!Array.isArray(problems) || problems.length === 0) {
+                throw new Error('No problems were returned from the problem bank');
+            }
         
-        const problemIds = problems.map((p: any) => p.id || p._id);
+            const problemIds = problems.map((p: any) => p.id || p._id);
 
-        const { error } = await supabase
-            .from('competitions')
-            .update({
-                status: 'ACTIVE',
-                is_active: true,
-                started_at: new Date().toISOString(),
-                selected_problems: problemIds,
-                quiz_started: true
-            })
-            .eq('id', competitionId);
+            const { error } = await supabase
+                .from('competitions')
+                .update({
+                    status: 'ACTIVE',
+                    is_active: true,
+                    started_at: new Date().toISOString(),
+                    selected_problems: problemIds,
+                    quiz_started: true
+                })
+                .eq('id', competitionId);
 
-        if (error) throw error;
-        revalidatePath(`/competitions/${competitionId}`);
-        return { success: true };
+            if (error) throw error;
+            revalidatePath(`/competitions/${competitionId}`);
+            return { success: true };
     } catch (error: any) {
         console.error('startQuizSession Error:', error);
         return { success: false, error: error.message || 'Failed to start session' };
@@ -206,15 +205,36 @@ export async function getAvailableProblems() {
     try {
         const { supabase } = await requireTeacher()
 
-        const { data: problems, error } = await supabase
+        // First try fetching from Supabase
+        const { data: supabaseProblems, error } = await supabase
             .from('problems')
             .select('id, title, slug, difficulty, category, points')
             .order('difficulty', { ascending: true })
             .order('title', { ascending: true })
 
-        if (error) throw error
+        if (!error && supabaseProblems && supabaseProblems.length > 0) {
+            return { success: true, problems: supabaseProblems }
+        }
 
-        return { success: true, problems: problems || [] }
+        // If Supabase is empty or fails, try fetching from the Backend API (MongoDB questions)
+        console.log('Supabase problems empty, fetching from Backend API...')
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
+        const response = await fetch(`${API_URL}/judge/questions`, { cache: 'no-store' })
+        
+        if (response.ok) {
+            const questions = await response.json()
+            const formattedProblems = questions.map((q: any) => ({
+                id: q._id || q.id,
+                title: q.title,
+                slug: q.slug || q.title.toLowerCase().replace(/ /g, '-'),
+                difficulty: q.difficulty?.toUpperCase() || 'MEDIUM',
+                category: q.category || 'General',
+                points: q.points || (q.difficulty === 'Easy' ? 10 : q.difficulty === 'Medium' ? 20 : 30)
+            }))
+            return { success: true, problems: formattedProblems }
+        }
+
+        return { success: true, problems: [] }
     } catch (error: any) {
         console.error('Error fetching problems:', error)
         return { success: false, error: error.message, problems: [] }
@@ -550,16 +570,20 @@ export async function createGameRoom(data: {
     selectedProblems: string[];
     isQuizMode?: boolean;
     isBattleTest?: boolean;
+    classroomId?: string;
 }) {
     try {
         const { supabase, user } = await requireTeacher()
 
         const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase()
 
+        // Workaround: Use title prefixes since columns is_quiz_mode and is_battle_test are missing
+        const displayTitle = data.isQuizMode ? `[QUIZ] ${data.title}` : data.isBattleTest ? `[BATTLE] ${data.title}` : data.title
+
         const { data: competition, error } = await supabase
             .from('competitions')
             .insert({
-                title: data.title,
+                title: displayTitle,
                 description: data.description || null,
                 difficulty: data.difficulty,
                 creator_id: user.id,
@@ -571,15 +595,28 @@ export async function createGameRoom(data: {
                 max_rank_display: 3,
                 status: 'DRAFT',
                 is_active: false,
-                is_quiz_mode: data.isQuizMode || false,
-                is_battle_test: data.isBattleTest || false
+                classroom_id: data.classroomId || null
             })
             .select()
             .single()
 
         if (error) throw error
 
+        // If a classroom is selected, auto-enroll all students using RPC
+        if (data.classroomId) {
+            const { error: rpcError } = await supabase.rpc('register_class_to_competition', {
+                comp_id: competition.id,
+                class_id: data.classroomId
+            })
+
+            if (rpcError) {
+                console.warn('Auto-enrollment RPC failed:', rpcError.message)
+            }
+        }
+
         revalidatePath('/teacher/competitions')
+        revalidatePath('/competitions')
+        
         return { success: true, room: competition }
 
     } catch (error: any) {

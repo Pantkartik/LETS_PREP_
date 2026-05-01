@@ -143,7 +143,7 @@ export function CompetitionView({ competition: initialCompetition, isTeacher, us
     const bannedParticipants = participants.filter(p => p.status === 'BANNED');
     const userParticipant = participants.find(p => p.user_id === userId);
 
-    const isBattle = competition.is_battle_test;
+    const isBattle = competition.title?.startsWith('[BATTLE]');
     const themeColor = isBattle ? 'text-red-500' : 'text-primary';
     const bgGradient = isBattle 
         ? 'from-red-950/20 via-slate-950 to-slate-950' 
@@ -183,7 +183,7 @@ export function CompetitionView({ competition: initialCompetition, isTeacher, us
                             </div>
                             <div>
                                 <h1 className="text-5xl font-black tracking-tighter uppercase italic">
-                                    {competition.title}
+                                    {competition.title?.replace(/^\[(QUIZ|BATTLE)\]\s*/, '')}
                                 </h1>
                                 <div className="flex items-center gap-3 mt-1">
                                     <Badge variant="outline" className={isBattle ? 'border-red-500/50 text-red-400 bg-red-500/5' : 'border-primary/50 text-primary bg-primary/5'}>

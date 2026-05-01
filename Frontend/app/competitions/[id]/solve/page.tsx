@@ -70,11 +70,14 @@ export default async function SolvePage({ params }: SolvePageProps) {
 
     const solvedProblemIds = new Set(submissions?.map(s => s.problem_id) || []);
 
-    if (competition.is_quiz_mode) {
+    if (competition.title?.startsWith('[QUIZ]')) {
         return (
             <div className="min-h-screen bg-[#0a0a0a] text-white p-8">
                 <QuizArena 
-                    competition={competition} 
+                    competition={{
+                        ...competition,
+                        title: competition.title.replace(/^\[(QUIZ|BATTLE)\]\s*/, '')
+                    }} 
                     problems={problems} 
                     solvedProblemIds={solvedProblemIds} 
                 />

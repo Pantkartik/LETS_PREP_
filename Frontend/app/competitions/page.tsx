@@ -125,10 +125,22 @@ export default function CompetitionsPage() {
     }
   };
 
-  const filteredCompetitions = competitions.filter(c => 
-    c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.invite_code.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const [activeType, setActiveType] = useState<'ALL' | 'QUIZ' | 'COMPETITION'>('ALL');
+
+  const filteredCompetitions = useMemo(() => {
+    return competitions.filter(c => {
+      const matchesSearch = c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           c.invite_code.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const isQuiz = c.title.startsWith('[QUIZ]');
+      const isBattle = c.title.startsWith('[BATTLE]');
+      
+      if (activeType === 'QUIZ') return matchesSearch && isQuiz;
+      if (activeType === 'COMPETITION') return matchesSearch && isBattle;
+      
+      return matchesSearch;
+    });
+  }, [competitions, searchQuery, activeType]);
 
   return (
     <div className="flex h-screen bg-slate-950 text-white overflow-hidden">
@@ -137,35 +149,58 @@ export default function CompetitionsPage() {
       <main className="flex-1 overflow-auto bg-gradient-to-br from-slate-950 via-slate-950 to-purple-950/10 p-4 sm:p-8">
         <div className="max-w-7xl mx-auto space-y-10">
           
-          {/* Header */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div className="space-y-2">
-              <h1 className="text-5xl font-black tracking-tighter uppercase italic flex items-center gap-4">
-                <Trophy className="w-12 h-12 text-primary" />
-                Battle Grounds
-              </h1>
-              <p className="text-slate-400 font-medium">
-                Enter competitive arenas, solve challenges, and climb the global ranks.
-              </p>
+          {/* Header & Tabs */}
+          <div className="space-y-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <div className="space-y-2">
+                <h1 className="text-5xl font-black tracking-tighter uppercase italic flex items-center gap-4">
+                  <Trophy className="w-12 h-12 text-primary" />
+                  Official Arenas
+                </h1>
+                <p className="text-slate-400 font-medium">
+                  Challenge yourself in official competitions and classroom quizzes.
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-4 w-full md:w-auto">
+                  <div className="relative flex-1 md:w-80 group">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-primary transition-colors" />
+                      <Input 
+                          placeholder="Search arenas..."
+                          className="pl-11 bg-slate-900/50 border-white/10 rounded-2xl h-12 focus:ring-primary/20"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                  </div>
+                  {userRole === 'TEACHER' && (
+                      <Link href="/teacher/competitions">
+                          <Button className="h-12 px-6 bg-primary hover:bg-primary/90 font-black shadow-lg shadow-primary/20">
+                              <Plus className="w-5 h-5 mr-2" /> TEACHER HUB
+                          </Button>
+                      </Link>
+                  )}
+              </div>
             </div>
-            
-            <div className="flex items-center gap-4 w-full md:w-auto">
-                <div className="relative flex-1 md:w-80 group">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-primary transition-colors" />
-                    <Input 
-                        placeholder="Search arenas..."
-                        className="pl-11 bg-slate-900/50 border-white/10 rounded-2xl h-12 focus:ring-primary/20"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                </div>
-                {userRole === 'TEACHER' && (
-                    <Link href="/teacher/competitions">
-                        <Button className="h-12 px-6 bg-primary hover:bg-primary/90 font-black shadow-lg shadow-primary/20">
-                            <Plus className="w-5 h-5 mr-2" /> TEACHER HUB
-                        </Button>
-                    </Link>
-                )}
+
+            <div className="flex gap-2 p-1 bg-slate-900/40 border border-white/5 rounded-2xl w-fit">
+              <button 
+                onClick={() => setActiveType('ALL')}
+                className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${activeType === 'ALL' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-500 hover:text-white'}`}
+              >
+                ALL ARENAS
+              </button>
+              <button 
+                onClick={() => setActiveType('COMPETITION')}
+                className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${activeType === 'COMPETITION' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
+              >
+                COMPETITIONS
+              </button>
+              <button 
+                onClick={() => setActiveType('QUIZ')}
+                className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${activeType === 'QUIZ' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
+              >
+                QUIZZES
+              </button>
             </div>
           </div>
 
@@ -221,7 +256,9 @@ export default function CompetitionsPage() {
                   <div className="p-8 relative z-10 flex flex-col md:flex-row gap-8 items-center">
                     <div className="flex-1 space-y-4">
                       <div className="flex items-center gap-4">
-                        <h3 className="text-2xl font-black text-white group-hover:text-primary transition-colors uppercase italic">{comp.title}</h3>
+                        <h3 className="text-2xl font-black text-white group-hover:text-primary transition-colors uppercase italic">
+                          {comp.title.replace(/^\[(QUIZ|BATTLE)\]\s*/, '')}
+                        </h3>
                         <Badge className={
                             comp.status === 'ACTIVE' ? 'bg-green-500/20 text-green-400 border-green-500/30' :
                             comp.status === 'COMPLETED' ? 'bg-slate-800 text-slate-500' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'

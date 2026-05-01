@@ -37,10 +37,12 @@ interface DashboardContentProps {
 
 export function DashboardContent({ profile, loading: profileLoading }: DashboardContentProps) {
   const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     async function fetchAnalytics() {
+        setLoadingAnalytics(true);
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
@@ -72,6 +74,8 @@ export function DashboardContent({ profile, loading: profileLoading }: Dashboard
 
     if (profile) {
         fetchAnalytics();
+    } else {
+        setLoadingAnalytics(false);
     }
   }, [profile]);
 
