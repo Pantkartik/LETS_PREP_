@@ -39,7 +39,7 @@ jobs:
 
       # 2. Docker Security (Hadolint)
       - name: 🐳 Dockerfile Linting
-        uses: hadolint/hadolint-action@v3.3.0
+        uses: hadolint/hadolint-action@v3.4.0
         with:
           dockerfile: Backend/Dockerfile
           failure-threshold: error
